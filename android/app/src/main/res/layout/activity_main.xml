@@ -1,0 +1,22 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/app_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/pilink_background">
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="64dp"
+        app:title="@string/app_name" app:titleTextAppearance="@style/PiLink.Brand"
+        app:titleMarginStart="12dp"
+        app:navigationIcon="@drawable/ic_link" app:navigationIconTint="@color/pilink_primary"
+        app:titleTextColor="@color/pilink_on_surface" />
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabs" android:layout_width="match_parent" android:layout_height="48dp"
+        app:tabTextColor="@color/pilink_muted" app:tabSelectedTextColor="@color/pilink_primary"
+        app:tabIndicatorColor="@color/pilink_primary" app:tabIndicatorHeight="3dp"
+        app:tabIndicatorFullWidth="true" app:tabMode="fixed" android:background="@color/pilink_background" />
+    <FrameLayout android:id="@+id/page_frame" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1">
+        <include layout="@layout/page_connection" />
+        <include layout="@layout/page_diagnostics" />
+        <include layout="@layout/page_settings" />
+    </FrameLayout>
+</LinearLayout>

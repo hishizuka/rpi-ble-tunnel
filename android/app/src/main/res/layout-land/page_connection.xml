@@ -1,0 +1,36 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/connection_page" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="horizontal">
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/connection_scroll" android:layout_width="0dp" android:layout_height="match_parent"
+        android:layout_weight="0.7" android:clipToPadding="false">
+        <LinearLayout android:id="@+id/connection_content" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/registered_devices" android:textAppearance="@style/PiLink.Title"
+                android:layout_marginBottom="12dp" />
+            <LinearLayout android:id="@+id/device_list" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/register_empty"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/add_device" app:icon="@drawable/ic_add" android:visibility="gone" />
+            <LinearLayout android:id="@+id/connection_hero" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:paddingTop="16dp">
+                <TextView android:id="@+id/connection_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="@string/disconnected" android:textSize="16sp" android:textStyle="bold"
+                    android:textColor="@color/pilink_on_surface" android:accessibilityLiveRegion="polite" />
+                <TextView android:id="@+id/selected_device" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/connection_action_scroll" android:layout_width="0dp" android:layout_height="match_parent"
+        android:layout_weight="0.3" android:fillViewport="true" android:clipToPadding="false">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:gravity="center_vertical" android:padding="16dp">
+            <include layout="@layout/connection_actions" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

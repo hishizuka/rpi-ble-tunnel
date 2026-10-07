@@ -1,0 +1,16 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/connection_actions" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingBottom="@dimen/connection_bottom_space">
+        <com.google.android.material.button.MaterialButton android:id="@+id/connect_button"
+            android:layout_width="match_parent" android:layout_height="wrap_content"  android:minHeight="60dp"
+            android:text="@string/connect" android:textSize="18sp" android:textStyle="bold"
+            android:insetTop="0dp" android:insetBottom="0dp" app:cornerRadius="30dp"
+            app:icon="@drawable/ic_bluetooth" app:iconGravity="textStart" app:iconPadding="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/open_termius"
+            style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content"
+              android:text="@string/open_termius" app:icon="@drawable/ic_open" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/copy_command"
+            style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/copy_command" app:icon="@drawable/ic_copy" />
+</LinearLayout>

@@ -1,0 +1,25 @@
+# Local development records and machine-specific settings
+/.local/
+.idea/
+.env
+.env.*
+!.env.example
+android/local.properties
+android/keystore.properties
+
+# Build output and caches
+build/
+macos/.build/
+android/.gradle/
+android/.kotlin/
+__pycache__/
+*.py[cod]
+*.core
+.DS_Store
+
+# Distributable binaries and local signing keys
+*.apk
+*.aab
+*.apks
+*.jks
+*.keystore

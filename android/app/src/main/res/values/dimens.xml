@@ -1,0 +1,4 @@
+<resources>
+    <dimen name="connection_bottom_space">16dp</dimen>
+    <dimen name="page_max_width">560dp</dimen>
+</resources>

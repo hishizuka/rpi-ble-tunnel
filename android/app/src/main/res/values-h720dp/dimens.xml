@@ -1,0 +1,3 @@
+<resources>
+    <dimen name="connection_bottom_space">24dp</dimen>
+</resources>

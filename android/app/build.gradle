@@ -1,0 +1,75 @@
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'org.pilink.android'
+    compileSdk 36
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'org.pilink.android'
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions.unitTests.all {
+        systemProperty 'pilink.mux.server', rootProject.file('../build/mux-interop-server').absolutePath
+    }
+}
+kotlin {
+    compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 }
+}
+dependencies {
+    implementation 'com.google.android.material:material:1.14.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+abstract class GenerateLicenseAssets extends DefaultTask {
+    @InputFile
+    abstract RegularFileProperty getLicenseFile()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @TaskAction
+    void generate() {
+        def destination = outputDirectory.file('LICENSE').get().asFile
+        destination.parentFile.mkdirs()
+        destination.bytes = licenseFile.get().asFile.bytes
+    }
+}
+
+def generateLicenseAssets = tasks.register('generateLicenseAssets', GenerateLicenseAssets) {
+    licenseFile.set(rootProject.layout.projectDirectory.file('../LICENSE'))
+    outputDirectory.set(layout.buildDirectory.dir('generated/pilink-license'))
+}
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets.addGeneratedSourceDirectory(generateLicenseAssets) { it.outputDirectory }
+    }
+}
+
+tasks.register('muxTransport', JavaExec) {
+    dependsOn 'compileDebugUnitTestKotlin'
+    classpath = tasks.named('testDebugUnitTest').get().classpath
+    mainClass = 'org.pilink.android.MuxTransportMain'
+    doFirst {
+        args = [providers.gradleProperty('muxWirePort').get(), providers.gradleProperty('muxLocalPort').get()]
+        if (providers.gradleProperty('muxInternet').getOrElse('false') == 'true') args += ['internet']
+    }
+}
+
+tasks.register('writeMuxClasspath') {
+    dependsOn 'compileDebugUnitTestKotlin'
+    doLast {
+        def output = rootProject.file('../build/android-mux-classpath.txt')
+        output.parentFile.mkdirs()
+        output.text = tasks.named('testDebugUnitTest').get().classpath.asPath
+    }
+}

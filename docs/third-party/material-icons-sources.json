@@ -1,0 +1,16 @@
+{
+  "project": "Google Material Design Icons",
+  "license": "Apache-2.0",
+  "adaptation": "Original SVG paths and circle geometry converted to Android VectorDrawable; theme tint applied at runtime",
+  "assets": {
+    "ic_bluetooth.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/device/bluetooth/materialiconsoutlined/24px.svg",
+    "ic_memory.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/hardware/memory/materialiconsoutlined/24px.svg",
+    "ic_settings.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/settings/materialiconsoutlined/24px.svg",
+    "ic_back.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/arrow_back/materialiconsoutlined/24px.svg",
+    "ic_add.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/content/add/materialiconsoutlined/24px.svg",
+    "ic_checked.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/toggle/radio_button_checked/materialiconsoutlined/24px.svg",
+    "ic_unchecked.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/toggle/radio_button_unchecked/materialiconsoutlined/24px.svg",
+    "ic_copy.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/content/content_copy/materialiconsoutlined/24px.svg",
+    "ic_open.xml": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/open_in_new/materialiconsoutlined/24px.svg"
+  }
+}

@@ -1,0 +1,4 @@
+<resources>
+    <bool name="pin_connection_actions">false</bool>
+    <bool name="split_connection_layout">false</bool>
+</resources>

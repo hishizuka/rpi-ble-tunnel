@@ -1,0 +1,35 @@
+<resources>
+    <style name="AppTheme" parent="Theme.Material3Expressive.Dark.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="colorPrimary">@color/pilink_primary</item>
+        <item name="colorOnPrimary">@color/pilink_on_primary</item>
+        <item name="colorPrimaryContainer">@color/pilink_selected</item>
+        <item name="colorOnPrimaryContainer">@color/pilink_primary</item>
+        <item name="colorSecondary">@color/pilink_primary</item>
+        <item name="colorOnSecondary">@color/pilink_on_primary</item>
+        <item name="colorSecondaryContainer">@color/pilink_selected</item>
+        <item name="colorOnSecondaryContainer">@color/pilink_on_surface</item>
+        <item name="colorSurface">@color/pilink_background</item>
+        <item name="colorSurfaceContainer">@color/pilink_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/pilink_selected</item>
+        <item name="colorOnSurface">@color/pilink_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/pilink_muted</item>
+        <item name="colorOutline">@color/pilink_outline</item>
+        <item name="android:colorBackground">@color/pilink_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="PiLink.Brand" parent="PiLink.Title">
+        <item name="android:textSize">26sp</item>
+    </style>
+    <style name="PiLink.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/pilink_on_surface</item>
+    </style>
+    <style name="PiLink.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/pilink_muted</item>
+    </style>
+</resources>
