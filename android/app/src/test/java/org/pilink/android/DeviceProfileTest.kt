@@ -19,11 +19,18 @@ class DeviceProfileTest {
     @Test fun namesAddressesAndPortsAreValidated() {
         for (invalid in listOf(profile.copy(hostname = " "), profile.copy(hostname = "x".repeat(64)),
             profile.copy(hostname = "Pi"), profile.copy(port = 1023), profile.copy(port = 65536), profile.copy(id = ""),
-            profile.copy(address = "invalid"))) {
+            profile.copy(address = "invalid"), profile.copy(displayName = " "))) {
             assertThrows(IllegalArgumentException::class.java) { invalid.validated() }
         }
         profile.copy(hostname = "x".repeat(63), port = 1024, address = "AA:BB:CC:DD:EE:FF").validated()
         profile.copy(port = 65535).validated()
+    }
+    @Test fun displayNamesAreIndependentOfConnectionAndSshIdentity() {
+        val named = profile.copy(displayName = "通勤号 / 内蔵", address = "aa:bb:cc:dd:ee:ff").normalized()
+        assertEquals("AA:BB:CC:DD:EE:FF", named.id)
+        assertEquals("AA:BB:CC:DD:EE:FF", named.address)
+        assertEquals("通勤号 / 内蔵", named.displayName)
+        assertEquals(profile.sshCommand(), named.sshCommand())
     }
     @Test fun localDomainAndCaseDoNotCreateDuplicateIdentities() {
         assertEquals("raspberrypi", DeviceProfile.normalizeHostname("  RASPBERRYPI.local  "))

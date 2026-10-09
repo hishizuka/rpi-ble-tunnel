@@ -82,7 +82,7 @@ class MuxBridgeTest {
             }
             bridge = MuxBridge(wire.getInputStream(), boundedOutput, { closes.incrementAndGet(); wire.close() },
                 127, 0, {}, { failed.set(it); failureCount.incrementAndGet(); failedEvent.countDown() },
-                { active.set(it); activity.add(it) }, { connections.set(it) })
+                { active.set(it); activity.add(it) }, { connections.set(it) }, powerSaving = true)
             bridge.start()
         }
         fun socket() = Socket(loopback, bridge.localPort).apply { soTimeout = 10000; tcpNoDelay = true }
@@ -132,6 +132,28 @@ class MuxBridgeTest {
             assertNull(fixture.failed.get())
             assertTrue(fixture.activity.contains(true))
             assertFalse(fixture.activity.last())
+        }
+    }
+
+    @Test fun livePowerSavingChangesKeepStreamsAndWakeIdleListener() {
+        Fixture().use { fixture ->
+            fixture.socket().use { socket ->
+                for (enabled in listOf(false, true, false, true)) {
+                    fixture.bridge.setPowerSaving(enabled)
+                    val data = byteArrayOf(if (enabled) 1 else 0, -1, 42)
+                    socket.getOutputStream().write(data)
+                    assertArrayEquals(data, socket.getInputStream().readNBytes(data.size))
+                }
+                socket.shutdownOutput()
+                assertArrayEquals(tail, socket.getInputStream().readNBytes(tail.size))
+                assertEquals(-1, socket.getInputStream().read())
+            }
+            fixture.idle()
+            fixture.bridge.setPowerSaving(false)
+            fixture.bridge.setPowerSaving(true)
+            roundtrip(fixture, byteArrayOf(0, 1, -1))
+            fixture.idle()
+            assertNull(fixture.failed.get())
         }
     }
 
@@ -277,7 +299,7 @@ class MuxBridgeTest {
                         127, 0, {}, { failed.set(it) }, { busy ->
                             active.set(busy)
                             if (!busy) inactive.countDown()
-                        }, { value -> count.set(value); if (value == 0) retired.countDown() })
+                        }, { value -> count.set(value); if (value == 0) retired.countDown() }, powerSaving = true)
                     try {
                         bridge.start()
                         Socket(loopback, bridge.localPort).use { tcp ->

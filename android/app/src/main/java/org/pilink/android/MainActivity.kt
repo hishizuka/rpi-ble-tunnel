@@ -34,14 +34,16 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     private enum class Page { CONNECTION, DIAGNOSTICS, SETTINGS }
     private lateinit var store: DeviceStore
+    private lateinit var settings: AppSettings
+    private lateinit var powerSavingSwitch: MaterialSwitch
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabs: TabLayout
     private lateinit var connect: MaterialButton
@@ -52,6 +54,8 @@ class MainActivity : AppCompatActivity() {
     private var discovery: PiDiscovery? = null
     private var registrationDialog: androidx.appcompat.app.AlertDialog? = null
     private var pendingRegistration = false
+    private var pendingRegistrationProfile: DeviceProfile? = null
+    private var pendingRegistrationHostname: String? = null
     private var pendingStart = false
     private var pendingDebugStart = false
     private var debugCapability: Long? = null
@@ -68,7 +72,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = DeviceStore(getPreferences(MODE_PRIVATE))
+        settings = AppSettings(this)
         setContentView(R.layout.activity_main)
+        powerSavingSwitch = findViewById(R.id.power_saving_switch)
+        powerSavingSwitch.isChecked = settings.powerSaving
+        powerSavingSwitch.setOnCheckedChangeListener { _, checked -> settings.powerSaving = checked }
         val splitConnectionLayout = resources.getBoolean(R.bool.split_connection_layout)
         if (!resources.getBoolean(R.bool.pin_connection_actions) && !splitConnectionLayout) {
             // Scroll the entire page in short windows so fixed actions cannot hide the device list.
@@ -176,7 +184,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(current: LinkState) {
         state = current
-        if (state.running) store.devices.firstOrNull { it.hostname == state.targetName }?.let {
+        val activeProfile = store.devices.firstOrNull { it.address != null && it.address == state.targetAddress }
+        if (state.running) activeProfile?.let {
             if (store.selectedId != it.id) store.select(it.id)
         }
         renderDevices()
@@ -184,12 +193,12 @@ class MainActivity : AppCompatActivity() {
             state.ready -> R.string.connected
             state.retrying -> R.string.reconnecting_wait
             state.running -> R.string.connecting
-            state.status.startsWith("接続エラー") -> R.string.connection_error
+            state.failed -> R.string.connection_error
             else -> R.string.disconnected
         }
         findViewById<TextView>(R.id.connection_status).setText(status)
-        val target = if (state.running) store.devices.firstOrNull { it.hostname == state.targetName }?.hostname
-            ?: state.targetName else store.selected?.hostname
+        val target = if (state.running) activeProfile?.displayName
+            ?: state.targetLabel.ifBlank { state.targetName } else store.selected?.displayName
         findViewById<TextView>(R.id.selected_device).text = target?.let { getString(R.string.selected_device, it) }
             ?: getString(R.string.empty_devices)
         connect.setText(if (state.running) {
@@ -208,13 +217,14 @@ class MainActivity : AppCompatActivity() {
             ConnectionMode.SSH -> R.string.mode_ssh_help
             null -> R.string.mode_unknown_help
         })
-        findViewById<TextView>(R.id.diagnostic_status).text = state.status
+        findViewById<TextView>(R.id.diagnostic_status).text = state.status.ifEmpty { getString(R.string.stopped) }
         findViewById<TextView>(R.id.diagnostic_log).text = state.log.ifEmpty { getString(R.string.no_log) }
         findViewById<View>(R.id.copy_command).isEnabled = sshCommand().isNotEmpty()
         findViewById<View>(R.id.copy_log).isEnabled = state.log.isNotEmpty()
         findViewById<View>(R.id.open_termius).isEnabled = state.ready
         findViewById<TextView>(R.id.ssh_endpoint).text = getString(R.string.ssh_endpoint,
-            store.selected?.hostname.orEmpty(), if (state.running) state.port else store.selected?.port ?: 2222)
+            if (state.running) state.targetName else store.selected?.hostname.orEmpty(),
+            if (state.running) state.port else store.selected?.port ?: 2222)
     }
 
     private fun renderDevices() {
@@ -231,7 +241,9 @@ class MainActivity : AppCompatActivity() {
                 // Configure the icon before a checked-state animation can start.
                 isCheckable = true; checkedIcon = null; isChecked = selected
                 isFocusable = true; isSelected = selected
-                contentDescription = profile.hostname + if (selected) ", ${getString(R.string.selected)}" else ""
+                contentDescription = getString(R.string.device_description, profile.displayName, profile.hostname,
+                    profile.address ?: getString(R.string.address_unregistered)) +
+                    if (selected) ", ${getString(R.string.selected)}" else ""
                 setOnClickListener { if (!state.running) { store.select(profile.id); render(state) } }
                 isClickable = !state.running
             }
@@ -246,8 +258,13 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams(dp(1), dp(32)).apply { marginStart = dp(16); marginEnd = dp(16) })
             val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             labels.addView(TextView(this).apply {
-                text = profile.hostname; textSize = 20f; setTextColor(color(R.color.pilink_on_surface))
+                text = profile.displayName; textSize = 20f; setTextColor(color(R.color.pilink_on_surface))
                 setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            })
+            labels.addView(TextView(this).apply {
+                text = getString(R.string.device_details, profile.hostname,
+                    profile.address ?: getString(R.string.address_unregistered))
+                textSize = 12f; setTextColor(color(R.color.pilink_muted))
             })
             row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(ImageView(this).apply {
@@ -262,7 +279,8 @@ class MainActivity : AppCompatActivity() {
         settings.removeAllViews()
         store.devices.forEach { profile ->
             val button = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                text = getString(R.string.edit_named_device, profile.hostname)
+                text = getString(R.string.edit_named_device, profile.displayName,
+                    profile.address ?: getString(R.string.address_unregistered))
                 isEnabled = !state.running
                 setOnClickListener { editDevice(profile) }
             }
@@ -271,39 +289,84 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.add_device).isEnabled = !state.running && store.devices.size < DeviceStore.LIMIT
     }
 
-    private fun registerDevice() {
+    private fun registerDevice(existing: DeviceProfile? = null, hostname: String? = existing?.hostname) {
         if (state.running) { toast(R.string.editing_while_connected); return }
-        if (store.devices.size >= DeviceStore.LIMIT) { toast(R.string.device_limit); return }
+        if (existing == null && store.devices.size >= DeviceStore.LIMIT) { toast(R.string.device_limit); return }
         val required = PiLinkService.bluetoothPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (required.isNotEmpty()) { pendingRegistration = true; requestPermissions(required.toTypedArray(), 3); return }
+        if (required.isNotEmpty()) {
+            pendingRegistration = true; pendingRegistrationProfile = existing; pendingRegistrationHostname = hostname
+            requestPermissions(required.toTypedArray(), 3); return
+        }
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), dp(12))
         }
-        val status = TextView(this).apply { setText(R.string.discovering_pi); setTextColor(color(R.color.pilink_muted)) }
+        val status = TextView(this).apply {
+            text = if (hostname == null) getString(R.string.discovering_pi) else getString(R.string.discovering_hostname, hostname)
+            setTextColor(color(R.color.pilink_muted))
+        }
         list.addView(status)
         val dialog = MaterialAlertDialogBuilder(this).setTitle(R.string.add_device)
             .setView(ScrollView(this).apply { addView(list) })
             .setNegativeButton(R.string.cancel, null)
-            .setNeutralButton(R.string.enter_hostname) { _, _ -> editDevice(null) }.create()
+            .setNeutralButton(R.string.enter_hostname) { _, _ -> searchByHostname(existing) }.create()
         registrationDialog?.dismiss()
+        discovery?.stop(); discovery = null
         registrationDialog = dialog
-        dialog.setOnDismissListener { discovery?.stop(); discovery = null; registrationDialog = null }
+        dialog.setOnDismissListener {
+            if (registrationDialog === dialog) { discovery?.stop(); discovery = null; registrationDialog = null }
+        }
         dialog.show()
-        val foundHosts = mutableSetOf<String>()
+        val foundAddresses = mutableSetOf<String>()
         discovery = PiDiscovery(this, { name, address ->
-            if (foundHosts.add(name)) {
+            if ((hostname == null || name == hostname) && foundAddresses.add(address)) {
                 status.setText(R.string.choose_pi)
                 list.addView(MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                    text = name; isEnabled = store.devices.none { it.hostname == name }
+                    text = getString(R.string.discovered_device, name, address)
+                    isEnabled = existing == null || store.devices.none { it.id != existing.id && it.address == address }
                     setOnClickListener {
                         if (state.running) { dialog.dismiss(); return@setOnClickListener }
-                        val profile = DeviceProfile(UUID.randomUUID().toString(), name, address = address)
-                        store.save(profile); dialog.dismiss(); render(state)
+                        val profile = existing?.copy(address = address)
+                            ?: store.devices.firstOrNull { it.address == address }
+                            ?: DeviceProfile(address, name, address = address)
+                        dialog.dismiss(); editDevice(profile)
                     }
                 }, LinearLayout.LayoutParams(-1, -2))
             }
-        }, { message -> if (foundHosts.isEmpty()) status.text = message })
+        }, { message -> if (foundAddresses.isEmpty()) status.text = message })
         discovery!!.start()
+    }
+
+    private fun searchByHostname(existing: DeviceProfile? = null) {
+        if (state.running) { toast(R.string.editing_while_connected); return }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), dp(12))
+        }
+        val box = TextInputLayout(this).apply {
+            hint = getString(R.string.hostname); boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        }
+        val hostname = TextInputEditText(box.context).apply {
+            setSingleLine(); setText(existing?.hostname.orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        box.addView(hostname, LinearLayout.LayoutParams(-1, -2))
+        form.addView(box, LinearLayout.LayoutParams(-1, -2))
+        form.addView(TextView(this).apply {
+            setText(R.string.hostname_search_help); setTextColor(color(R.color.pilink_muted))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        val dialog = MaterialAlertDialogBuilder(this).setTitle(R.string.enter_hostname)
+            .setView(form).setPositiveButton(R.string.search, null).setNegativeButton(R.string.cancel, null).create()
+        registrationDialog?.dismiss()
+        discovery?.stop(); discovery = null
+        registrationDialog = dialog
+        dialog.setOnDismissListener { if (registrationDialog === dialog) registrationDialog = null }
+        dialog.show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            val name = DeviceProfile.normalizeHostname(hostname.text.toString())
+            if (!DeviceProfile.validHostname(name)) {
+                box.error = getString(R.string.hostname_validation_error); return@setOnClickListener
+            }
+            dialog.dismiss(); registerDevice(existing, name)
+        }
     }
 
     private fun openTermius() {
@@ -313,9 +376,11 @@ class MainActivity : AppCompatActivity() {
         try { startActivity(launch) } catch (_: ActivityNotFoundException) { toast(R.string.termius_missing) }
     }
 
-    private fun editDevice(existing: DeviceProfile?) {
+    private fun editDevice(existing: DeviceProfile) {
         if (state.running) { toast(R.string.editing_while_connected); return }
-        if (existing == null && store.devices.size >= DeviceStore.LIMIT) { toast(R.string.device_limit); return }
+        if (existing.address == null) { searchByHostname(existing); return }
+        val registered = store.devices.any { it.id == existing.id }
+        if (!registered && store.devices.size >= DeviceStore.LIMIT) { toast(R.string.device_limit); return }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), 0)
         }
@@ -331,14 +396,18 @@ class MainActivity : AppCompatActivity() {
             form.addView(box, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
             return input
         }
-        val hostname = field(R.string.hostname, existing?.hostname.orEmpty())
+        val displayName = field(R.string.display_name, existing.displayName)
+        val hostname = field(R.string.hostname, existing.hostname)
+        form.addView(TextView(this).apply {
+            text = getString(R.string.discovered_address, existing.address); setTextColor(color(R.color.pilink_muted))
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         form.addView(TextView(this).apply { text = getString(R.string.hostname_help); setTextColor(color(R.color.pilink_muted)) })
         val scroll = ScrollView(this).apply { addView(form) }
-        val builder = MaterialAlertDialogBuilder(this).setTitle(if (existing == null) R.string.add_device else R.string.edit_device)
+        val builder = MaterialAlertDialogBuilder(this).setTitle(if (registered) R.string.edit_device else R.string.add_device)
             .setView(scroll).setPositiveButton(R.string.save, null).setNegativeButton(R.string.cancel, null)
-        if (existing != null) builder.setNeutralButton(R.string.delete) { _, _ ->
+        if (registered) builder.setNeutralButton(R.string.delete) { _, _ ->
             MaterialAlertDialogBuilder(this).setTitle(R.string.delete_device_title)
-                .setMessage(getString(R.string.delete_device_message, existing.hostname))
+                .setMessage(getString(R.string.delete_device_message, existing.displayName, existing.address.orEmpty()))
                 .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.delete) { _, _ ->
                     store.remove(existing.id); render(state)
                 }.show()
@@ -348,12 +417,9 @@ class MainActivity : AppCompatActivity() {
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 if (state.running) { dialog.dismiss(); toast(R.string.editing_while_connected); return@setOnClickListener }
                 val name = DeviceProfile.normalizeHostname(hostname.text.toString())
-                val sameHost = existing?.hostname == name
-                val profile = DeviceProfile(existing?.id ?: UUID.randomUUID().toString(), name, existing?.port ?: 2222,
-                    address = if (sameHost) existing?.address else null,
-                    legacyBluetoothName = if (sameHost) existing?.legacyBluetoothName else null)
+                val profile = existing.copy(hostname = name, displayName = displayName.text.toString().trim())
                 if (runCatching { profile.validated() }.isFailure) { toast(R.string.device_validation_error); return@setOnClickListener }
-                if (store.devices.any { it.id != profile.id && it.hostname == profile.hostname }) {
+                if (store.devices.any { it.id != profile.id && it.address == profile.address }) {
                     toast(R.string.duplicate_device); return@setOnClickListener
                 }
                 store.save(profile); dialog.dismiss(); render(state)
@@ -365,10 +431,11 @@ class MainActivity : AppCompatActivity() {
     private fun sshCommand(): String {
         val profile = store.selected ?: return ""
         if (!state.running) return profile.sshCommand()
-        return profile.sshCommand(state.port)
+        return profile.copy(hostname = state.targetName).sshCommand(state.port)
     }
     private fun requestStart() {
         val profile = debugProfile ?: store.selected ?: return
+        if (profile.address == null && debugProfile == null) { registerDevice(profile); return }
         val required = PiLinkService.bluetoothPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (required.isNotEmpty()) { pendingStart = true; requestPermissions(required.toTypedArray(), 1); return }
         val capability = debugCapability ?: PiLinkProfile.AUTO
@@ -376,7 +443,8 @@ class MainActivity : AppCompatActivity() {
         startForegroundService(Intent(this, PiLinkService::class.java).setAction(PiLinkService.START)
             .putExtra("name", profile.hostname).putExtra("port", profile.port)
             .putExtra("host_key_alias", "${profile.hostname}.local").putExtra("capability", capability)
-            .putExtra("address", profile.address).putExtra("legacy_name", profile.legacyBluetoothName))
+            .putExtra("address", profile.address).putExtra("legacy_name", profile.legacyBluetoothName)
+            .putExtra("display_name", profile.displayName))
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
     }
@@ -384,7 +452,9 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 3 && pendingRegistration) {
             pendingRegistration = false
-            if (PiLinkService.bluetoothPermissions().all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) registerDevice()
+            val profile = pendingRegistrationProfile; pendingRegistrationProfile = null
+            val hostname = pendingRegistrationHostname; pendingRegistrationHostname = null
+            if (PiLinkService.bluetoothPermissions().all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) registerDevice(profile, hostname)
             else toast(R.string.bluetooth_permission)
         }
         if (requestCode == 1 && pendingStart) {
@@ -395,6 +465,7 @@ class MainActivity : AppCompatActivity() {
     }
     override fun onStart() {
         super.onStart()
+        powerSavingSwitch.isChecked = settings.powerSaving
         bound = bindService(Intent(this, PiLinkService::class.java), connection, Context.BIND_AUTO_CREATE)
     }
     override fun onStop() {
@@ -432,10 +503,13 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("connect", false)) {
             intent.removeExtra("connect")
             val requested = intent.getStringExtra("name") ?: store.selected?.hostname ?: return
-            val matched = store.devices.firstOrNull {
+            val requestedAddress = intent.getStringExtra("address")?.let(DeviceProfile::normalizeAddress)
+            val matches = store.devices.filter {
                 it.hostname == DeviceProfile.normalizeHostname(requested) || it.legacyBluetoothName == requested
             }
-            val base = matched ?: DeviceProfile("debug", DeviceProfile.normalizeHostname(requested))
+            val matched = if (requestedAddress != null) store.devices.firstOrNull { it.address == requestedAddress }
+                else matches.firstOrNull { it.id == store.selectedId } ?: matches.singleOrNull()
+            val base = matched ?: DeviceProfile("debug", DeviceProfile.normalizeHostname(requested), address = requestedAddress)
             debugProfile = base.copy(port = intent.getIntExtra("port", base.port)).validated()
             debugCapability = when {
                 intent.getBooleanExtra("internet", false) -> PiLinkProfile.INTERNET

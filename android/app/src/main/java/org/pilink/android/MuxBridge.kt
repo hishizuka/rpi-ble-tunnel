@@ -40,7 +40,8 @@ class MuxBridge(
     private val connections: (Int) -> Unit = {},
     private val allowInternet: Boolean = false,
     private val resolve: (MuxDestination) -> List<InetAddress> = { InetAddress.getAllByName(it.host).take(8) },
-    private val connectTimeoutMillis: Long = 10000
+    private val connectTimeoutMillis: Long = 10000,
+    private var powerSaving: Boolean = false
 ) : Closeable {
     private class Endpoint(val stream: MuxStream, var channel: SocketChannel? = null, var key: SelectionKey? = null) {
         var shutdown = false
@@ -64,6 +65,22 @@ class MuxBridge(
     private var lastActive = false
     private var lastCount = 0
     val localPort: Int
+
+    fun setPowerSaving(enabled: Boolean) {
+        lock.withLock {
+            powerSaving = enabled
+            selector.wakeup()
+        }
+    }
+
+    private fun selectTimeoutMillis(): Long = lock.withLock {
+        if (!powerSaving) return@withLock 100L
+        val deadline = endpoints.values.filter {
+            it.stream.destination != null && !it.stream.acknowledged && it.stream.reset == null
+        }.minOfOrNull { it.deadline } ?: return@withLock 0L
+        // Zero means an event-only wait; pending DNS/TCP connects retain their deadlines.
+        (TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()) + 1).coerceAtLeast(1)
+    }
 
     init {
         try {
@@ -113,7 +130,7 @@ class MuxBridge(
         }
         worker("pilink-mux-tcp") {
             while (!closed.get()) {
-                selector.select(100)
+                selector.select(selectTimeoutMillis())
                 lock.withLock {
                     if (!closed.get()) {
                         retire()
@@ -145,7 +162,7 @@ class MuxBridge(
     private fun worker(name: String, action: () -> Unit) {
         val thread = Thread({
             try { action() } catch (error: Exception) {
-                if (closeOnce()) failure(error.message ?: "多重化通信エラー")
+                if (closeOnce()) failure(error.message ?: "Multiplex transport error")
             } finally { lock.withLock {
                 workers.remove(Thread.currentThread())
                 if (closed.get() && workers.isEmpty()) runCatching { selector.close() }
@@ -161,7 +178,7 @@ class MuxBridge(
             val channel = listener.accept() ?: return
             if (core.count >= MuxLimits.STREAMS) {
                 channel.close()
-                report("同時接続は 8 本までです。追加の TCP 接続を閉じました。")
+                report("Concurrent connection limit: 8; closed the additional TCP connection")
                 return@repeat
             }
             try {
@@ -182,7 +199,7 @@ class MuxBridge(
         val endpoint = Endpoint(stream)
         endpoint.deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(connectTimeoutMillis)
         endpoints[stream.id] = endpoint
-        report("Internet 接続: stream=${stream.id} ${destination.host}:${destination.port}")
+        report("Internet connection: stream=${stream.id} ${destination.host}:${destination.port}")
         try {
             MuxResolver.executor.purge()
             endpoint.job = MuxResolver.executor.submit {

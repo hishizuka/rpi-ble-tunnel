@@ -37,10 +37,15 @@ class DeviceStore(private val preferences: SharedPreferences) {
                 val row = array.getJSONObject(index)
                 if (row.has("hostname")) DeviceProfile(row.getString("id"), row.getString("hostname"), row.getInt("port"),
                     row.optString("address").takeIf { it.isNotBlank() },
-                    row.optString("legacyBluetoothName").takeIf { it.isNotBlank() }).validated()
+                    row.optString("legacyBluetoothName").takeIf { it.isNotBlank() },
+                    row.optString("displayName", row.getString("hostname"))).validated()
                 else fromLegacy(row.getString("id"), row.getString("hostKeyAlias"), row.getString("bluetoothName"), row.getInt("port"))
             }
-            uniquePorts(loaded).also { persist(it, preferences.getString("selected_device", null)) }
+            val selected = preferences.getString("selected_device", null)
+            val selectedAddress = loaded.firstOrNull { it.id == selected }?.normalized()?.id
+            uniquePorts(loaded.map { it.normalized() }.distinctBy { it.id }).also {
+                persist(it, selectedAddress)
+            }
         }.getOrDefault(emptyList())
         // A Bluetooth nickname alone cannot establish the Pi's actual hostname.
         return emptyList()
@@ -53,12 +58,14 @@ class DeviceStore(private val preferences: SharedPreferences) {
     }
 
     fun save(profile: DeviceProfile) {
-        profile.validated()
-        require(devices.none { it.id != profile.id && it.hostname == profile.hostname })
-        val exists = devices.any { it.id == profile.id }
+        val normalized = profile.normalized()
+        require(normalized.address != null)
+        val previousId = if (DeviceProfile.validAddress(profile.id)) DeviceProfile.normalizeAddress(profile.id) else profile.id
+        require(devices.none { it.id != previousId && it.address == normalized.address })
+        val exists = devices.any { it.id == previousId }
         require(exists || devices.size < LIMIT)
-        devices = uniquePorts(if (exists) devices.map { if (it.id == profile.id) profile else it } else devices + profile)
-        selectedId = profile.id
+        devices = uniquePorts(if (exists) devices.map { if (it.id == previousId) normalized else it } else devices + normalized)
+        selectedId = normalized.id
         persist(devices, selectedId)
     }
 
@@ -72,6 +79,7 @@ class DeviceStore(private val preferences: SharedPreferences) {
         val array = JSONArray()
         devices.forEach { profile -> array.put(JSONObject().apply {
             put("id", profile.id); put("hostname", profile.hostname); put("port", profile.port)
+            put("displayName", profile.displayName)
             profile.address?.let { put("address", it) }
             profile.legacyBluetoothName?.let { put("legacyBluetoothName", it) }
         }) }

@@ -20,7 +20,8 @@ class LinkController(
     private val modeSelected: (Long) -> Unit = {},
     initialAddress: String? = null,
     private val legacyName: String? = null,
-    private val addressSelected: (String) -> Unit = {}
+    private val addressSelected: (String) -> Unit = {},
+    private var powerSaving: Boolean = false
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private var ble: BleConnection? = null
@@ -34,9 +35,27 @@ class LinkController(
     private var multiplex = false
     private var internet = false
     private var negotiatedCapability: Long? = null
+    private var sessionBusy = false
+
+    fun setPowerSaving(enabled: Boolean) {
+        powerSaving = enabled
+        mux?.setPowerSaving(enabled)
+        updateBlePriority()
+    }
+
+    private fun updateBlePriority() {
+        val busy = !ready || (multiplex && mux == null) || pending != null || sessionBusy
+        ble?.setPowerSaving(powerSaving, busy)
+    }
+
+    private fun updateSessionActive(active: Boolean) {
+        sessionBusy = active
+        updateBlePriority()
+        sessionActive(active)
+    }
 
     fun start() {
-        require(port in 1024..65535) { "ポートは 1024〜65535 で指定してください" }
+        require(port in 1024..65535) { "Port must be between 1024 and 65535" }
         connectBLE()
     }
 
@@ -60,12 +79,14 @@ class LinkController(
                     if (multiplex || internet) openMultiplexChannel()
                     else {
                         if (listener == null) startListener()
+                        updateBlePriority()
                         report("READY 127.0.0.1:$port → BLE → Pi 127.0.0.1:22")
                         if (pending != null) openChannel()
                     }
-                } catch (error: Exception) { fail(error.message ?: "TCP 待受失敗") }
+                } catch (error: Exception) { fail(error.message ?: "TCP listener failed") }
             }
         }, ::fail, expectedCapability, legacyName)
+        updateBlePriority()
         ble!!.start()
     }
 
@@ -83,7 +104,7 @@ class LinkController(
                     handler.post { accept(socket) }
                 }
             } catch (error: Exception) {
-                handler.post { if (!stopped) fail("TCP 待受エラー: ${error.message}") }
+                handler.post { if (!stopped) fail("TCP listener error: ${error.message}") }
             }
         }
     }
@@ -91,16 +112,17 @@ class LinkController(
     private fun accept(socket: Socket) {
         if (stopped || pending != null || session != null) {
             runCatching { socket.close() }
-            if (!stopped) report("同時接続は 1 本までです。追加の TCP 接続を閉じました。")
+            if (!stopped) report("Concurrent connection limit: 1; closed the additional TCP connection")
             return
         }
         try {
             socket.tcpNoDelay = true
             pending = socket
-            if (ready) openChannel() else report("次の SSH セッション: BLE の再接続を待っています")
+            updateBlePriority()
+            if (ready) openChannel() else report("Waiting for BLE to reconnect for the next SSH session")
         } catch (error: Exception) {
             runCatching { socket.close() }
-            fail("TCP 接続エラー: ${error.message}")
+            fail("TCP connection error: ${error.message}")
         }
     }
 
@@ -119,10 +141,10 @@ class LinkController(
                         }, channel.maxTransmitPacketSize.coerceAtLeast(1)) { sent, received, reason ->
                         handler.post {
                             if (!stopped && session === bridge) {
-                                report("SSH セッション終了: $reason、TCP→BLE=$sent、BLE→TCP=$received バイト")
+                                report("SSH session closed: $reason, TCP→BLE=$sent, BLE→TCP=$received bytes")
                                 session = null
-                                sessionActive(false)
                                 ready = false
+                                updateSessionActive(false)
                                 ble?.close()
                                 ble = null
                                 // Re-read the profile after each session, preserving the local listener.
@@ -132,10 +154,10 @@ class LinkController(
                     }
                     session = bridge
                     pending = null
-                    report("SSH セッション接続中 (L2CAP MTU=${channel.maxTransmitPacketSize})")
-                    sessionActive(true)
+                    report("SSH session connected (L2CAP MTU=${channel.maxTransmitPacketSize})")
+                    updateSessionActive(true)
                     bridge.start()
-                } catch (error: Exception) { fail("SSH ブリッジ開始失敗: ${error.message}") }
+                } catch (error: Exception) { fail("SSH bridge failed: ${error.message}") }
             }
         }
     }
@@ -148,16 +170,17 @@ class LinkController(
                     { runCatching { channel.close() } }, channel.maxTransmitPacketSize.coerceAtLeast(1), port,
                     { message -> handler.post { if (!stopped) report(message) } },
                     { message -> handler.post { fail(message) } },
-                    { active -> handler.post { if (!stopped) sessionActive(active) } },
-                    { count -> handler.post { if (!stopped) report(if (internet) "中継接続数: $count" else "多重化 SSH 接続数: $count") } },
-                    allowInternet = internet)
+                    { active -> handler.post { if (!stopped) updateSessionActive(active) } },
+                    { count -> handler.post { if (!stopped) report(if (internet) "Relay streams: $count" else "SSH streams: $count") } },
+                    allowInternet = internet, powerSaving = powerSaving)
                 mux = bridge
                 bridge.start()
-                report("READY 127.0.0.1:$port → BLE mux → Pi 127.0.0.1:22（最大 8 接続）")
-                if (internet) report("Internet 中継中: Pi の SOCKS5 → BLE → Android TCP / DNS")
+                updateBlePriority()
+                report("READY 127.0.0.1:$port → BLE mux → Pi 127.0.0.1:22 (up to 8 connections)")
+                if (internet) report("Internet relay: Pi SOCKS5 → BLE → Android TCP / DNS")
             } catch (error: Exception) {
                 runCatching { channel.close() }
-                fail("多重化開始失敗: ${error.message}")
+                fail("Multiplex startup failed: ${error.message}")
             }
         }
     }

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Binder
@@ -27,11 +28,12 @@ import java.util.Date
 import java.util.Locale
 import androidx.core.content.ContextCompat
 
-data class LinkState(val running: Boolean = false, val status: String = "停止中", val port: Int = 2222,
+data class LinkState(val running: Boolean = false, val status: String = "", val port: Int = 2222,
                      val log: String = "", val multiplex: Boolean = false, val internet: Boolean = false,
                      val mode: ConnectionMode? = null, val targetName: String = "",
                      val targetAlias: String = "", val ready: Boolean = false,
-                     val retrying: Boolean = false)
+                     val retrying: Boolean = false, val targetAddress: String? = null,
+                     val targetLabel: String = "", val failed: Boolean = false)
 
 class PiLinkService : Service() {
     companion object {
@@ -50,6 +52,10 @@ class PiLinkService : Service() {
     private val observers = mutableSetOf<(LinkState) -> Unit>()
     private val lines = ArrayDeque<String>()
     private var controller: LinkController? = null
+    private lateinit var settings: AppSettings
+    private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppSettings.POWER_SAVING) controller?.setPowerSaving(settings.powerSaving)
+    }
     private var wakeLock: PowerManager.WakeLock? = null
     private var connectWakeLock: PowerManager.WakeLock? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -68,14 +74,18 @@ class PiLinkService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        settings = AppSettings(this)
+        settings.preferences.registerOnSharedPreferenceChangeListener(settingsListener)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "PiLink 接続", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW)
         )
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PiLink:SSH")
         connectWakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PiLink:Connect")
         ContextCompat.registerReceiver(this, retryReceiver, IntentFilter(RETRY), ContextCompat.RECEIVER_NOT_EXPORTED)
         val previous = getSharedPreferences("connection-result", MODE_PRIVATE)
-        state = LinkState(status = previous.getString("status", "停止中") ?: "停止中",
+        val failed = previous.getBoolean("failed", false)
+        state = LinkState(status = if (failed) previous.getString("status", null) ?: getString(R.string.connection_error)
+            else getString(R.string.stopped), failed = failed,
             port = previous.getInt("port", 2222), log = previous.getString("log", "") ?: "",
             multiplex = previous.getBoolean("multiplex", false), internet = previous.getBoolean("internet", false))
     }
@@ -87,27 +97,31 @@ class PiLinkService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            STOP -> stopConnection("停止中")
+            STOP -> stopConnection(getString(R.string.stopped))
             START -> if (!reconnect.running) {
                 if (bluetoothPermissions().any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
-                    stopConnection("Bluetooth の利用許可が必要です")
+                    stopConnection(getString(R.string.bluetooth_permission), failed = true)
                     return START_NOT_STICKY
                 }
                 val port = intent.getIntExtra("port", 2222)
                 val name = intent.getStringExtra("name") ?: ""
-                if (port !in 1024..65535 || !DeviceProfile.validHostname(name)) {
-                    stopConnection("接続設定が不正です")
+                val address = intent.getStringExtra("address")
+                if (port !in 1024..65535 || !DeviceProfile.validHostname(name) ||
+                    (address == null && !BuildConfig.DEBUG) || (address != null && !DeviceProfile.validAddress(address))) {
+                    stopConnection(getString(R.string.invalid_connection_settings), failed = true)
                     return START_NOT_STICKY
                 }
                 lines.clear()
                 getSharedPreferences("connection-result", MODE_PRIVATE).edit().clear().apply()
                 val capability = intent.getLongExtra("capability", PiLinkProfile.AUTO)
                 if (capability !in listOf(PiLinkProfile.AUTO, PiLinkProfile.SSH, PiLinkProfile.MUX, PiLinkProfile.INTERNET)) {
-                    stopConnection("接続設定が不正です")
+                    stopConnection(getString(R.string.invalid_connection_settings), failed = true)
                     return START_NOT_STICKY
                 }
-                state = LinkState(true, "接続を開始しています…", port, targetName = name,
-                    targetAlias = intent.getStringExtra("host_key_alias") ?: "")
+                state = LinkState(true, getString(R.string.starting_connection), port, targetName = name,
+                    targetAlias = intent.getStringExtra("host_key_alias") ?: "",
+                    targetAddress = address?.let(DeviceProfile::normalizeAddress),
+                    targetLabel = intent.getStringExtra("display_name") ?: name)
                 startForeground(NOTIFICATION, notification(state.status), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
                 request = Intent(intent)
                 attemptCount = 0
@@ -120,9 +134,9 @@ class PiLinkService : Service() {
     private fun startAttempt(token: Long) {
         val config = request ?: return
         attemptCount++
-        state = state.copy(ready = false, retrying = false, mode = null,
+        state = state.copy(ready = false, retrying = false, failed = false, mode = null,
             internet = false, multiplex = false,
-            status = if (attemptCount == 1) "接続を開始しています…" else "再接続しています…")
+            status = getString(if (attemptCount == 1) R.string.starting_connection else R.string.reconnecting))
         publish()
         connectWakeLock?.acquire(65_000)
         controller = LinkController(this, state.targetName, state.port,
@@ -140,7 +154,11 @@ class PiLinkService : Service() {
                 publish()
             } }, initialAddress = config.getStringExtra("address"),
             legacyName = config.getStringExtra("legacy_name"),
-            addressSelected = { address -> if (reconnect.isCurrent(token)) request?.putExtra("address", address) })
+            addressSelected = { address -> if (reconnect.isCurrent(token)) {
+                request?.putExtra("address", address)
+                state = state.copy(targetAddress = address)
+                publish()
+            } }, powerSaving = settings.powerSaving)
         controller!!.start()
     }
 
@@ -150,8 +168,8 @@ class PiLinkService : Service() {
         controller = null
         releaseConnectWakeLock()
         setSessionActive(false)
-        state = state.copy(ready = false, retrying = true, mode = null, internet = false, multiplex = false)
-        report("接続エラー: $message")
+        state = state.copy(ready = false, retrying = true, failed = true, mode = null, internet = false, multiplex = false)
+        report("Connection error: $message")
         report(getString(R.string.reconnect_wait))
     }
 
@@ -182,30 +200,34 @@ class PiLinkService : Service() {
         lines.addLast("${SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())} $message")
         while (lines.size > 30) lines.removeFirst()
         val status = when {
-            message.startsWith("READY ") || message.startsWith("Internet 中継中:") -> waitingStatus()
-            message.startsWith("多重化 SSH 接続数:") || message.startsWith("中継接続数:") -> {
+            message.startsWith("BLE priority:") -> state.status
+            message.startsWith("READY ") || message.startsWith("Internet relay:") -> waitingStatus()
+            message.startsWith("SSH streams:") || message.startsWith("Relay streams:") -> {
                 val count = message.substringAfter(":").trim().toIntOrNull() ?: 0
-                if (count == 0) waitingStatus() else if (state.internet) "SSH / Internet 中継中（$count / 8 本）" else "SSH 接続中（$count / 8 本）"
+                if (count == 0) waitingStatus() else getString(if (state.internet) R.string.internet_streams else R.string.ssh_streams, count)
             }
-            message.startsWith("GATT:") -> "Pi の接続設定を確認しています…"
-            message.startsWith("Pi に接続") -> "Pi に接続しています…"
-            message.startsWith("SSH セッション接続中") -> "SSH 接続中"
-            message.startsWith("SSH セッション終了") -> "次の SSH 接続を準備しています…"
-            message.startsWith("同時接続") -> if (state.multiplex) "SSH 接続中（同時に 8 本まで）" else "SSH 接続中（同時に 1 本まで）"
+            message.startsWith("GATT:") -> getString(R.string.checking_pi_settings)
+            message.startsWith("Pi connecting:") -> getString(R.string.connecting_pi)
+            message.startsWith("Searching for PiLink") -> getString(R.string.discovering_pi)
+            message.startsWith("SSH session connected") -> getString(R.string.ssh_connected)
+            message.startsWith("SSH session closed:") -> getString(R.string.preparing_ssh)
+            message.startsWith("Waiting for BLE") -> getString(R.string.waiting_ble)
+            message.startsWith("Concurrent connection limit") -> getString(R.string.ssh_connection_limit, if (state.multiplex) 8 else 1)
+            message.startsWith("Connection error:") -> getString(R.string.connection_failure, message.substringAfter(":").trim())
             else -> message
         }
         state = state.copy(status = status,
-            ready = if (message.startsWith("READY ")) true else if (message.startsWith("SSH セッション終了")) false else state.ready,
-            mode = if (message.startsWith("SSH セッション終了")) null else state.mode,
+            ready = if (message.startsWith("READY ")) true else if (message.startsWith("SSH session closed:")) false else state.ready,
+            mode = if (message.startsWith("SSH session closed:")) null else state.mode,
             log = lines.joinToString("\n"))
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(state.status))
         publish()
     }
 
     private fun waitingStatus() = when {
-        state.internet -> "接続済み · SSH / Internet 待受中"
-        state.multiplex -> "接続済み · SSH 待受中（最大 8 本）"
-        else -> "接続済み · SSH 待受中"
+        state.internet -> getString(R.string.waiting_internet)
+        state.multiplex -> getString(R.string.waiting_mux)
+        else -> getString(R.string.waiting_ssh)
     }
 
     // A wake lock covers active SSH/Internet streams and the final wire write.
@@ -222,21 +244,21 @@ class PiLinkService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_link).setContentTitle("PiLink")
             .setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null, "停止", stop).build()).build()
+            .addAction(Notification.Action.Builder(null, getString(R.string.stop), stop).build()).build()
     }
 
-    private fun stopConnection(status: String) {
+    private fun stopConnection(status: String, failed: Boolean = false) {
         reconnect.stop()
         request = null
         controller?.stop()
         controller = null
         setSessionActive(false)
         releaseConnectWakeLock()
-        state = state.copy(running = false, status = status, mode = null, ready = false, retrying = false)
+        state = state.copy(running = false, status = status, mode = null, ready = false, retrying = false, failed = failed)
         // Retain the failure message when an unbound background service is destroyed.
         getSharedPreferences("connection-result", MODE_PRIVATE).edit().putString("status", status)
             .putInt("port", state.port).putString("log", state.log).putBoolean("multiplex", state.multiplex)
-            .putBoolean("internet", state.internet).apply()
+            .putBoolean("internet", state.internet).putBoolean("failed", failed).apply()
         Log.i("PiLink", status)
         publish()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -244,6 +266,7 @@ class PiLinkService : Service() {
     }
 
     override fun onDestroy() {
+        settings.preferences.unregisterOnSharedPreferenceChangeListener(settingsListener)
         reconnect.stop()
         request = null
         controller?.stop()

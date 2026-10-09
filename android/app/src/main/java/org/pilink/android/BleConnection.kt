@@ -44,33 +44,42 @@ class BleConnection(
     private var advertisedName: String? = null
     private val excluded = mutableSetOf<String>()
     private val values = mutableMapOf<UUID, ByteArray>()
-    private var stage = "BLE 接続"
-    private val timeout = Runnable { fail("タイムアウト: $stage") }
+    private var stage = "BLE connection"
+    private val timeout = Runnable { fail("Timeout: $stage") }
+    private val powerPolicy = BlePowerPolicy { lowPower ->
+        val priority = if (lowPower) BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER else BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+        val label = if (lowPower) "LOW_POWER" else "BALANCED"
+        val accepted = runCatching { gatt?.requestConnectionPriority(priority) == true }
+        report("BLE priority: $label ${if (accepted.getOrDefault(false)) "requested" else "not accepted"}")
+        accepted.getOrDefault(false)
+    }
+
+    fun setPowerSaving(enabled: Boolean, busy: Boolean) { powerPolicy.update(enabled, busy) }
 
     private fun onMain(action: () -> Unit) {
         handler.post {
             if (!stopped) {
-                try { action() } catch (error: Exception) { fail(error.message ?: "Bluetooth エラー") }
+                try { action() } catch (error: Exception) { fail(error.message ?: "Bluetooth error") }
             }
         }
     }
 
     fun start() {
         try {
-            require(adapter?.isEnabled == true) { "Bluetooth を ON にしてください" }
+            require(adapter?.isEnabled == true) { "Turn on Bluetooth" }
             handler.postDelayed(timeout, 30000)
             if (targetAddress != null) {
                 connect(adapter.getRemoteDevice(targetAddress))
             } else {
                 startScan()
             }
-        } catch (error: Exception) { fail(error.message ?: "Bluetooth を開始できません") }
+        } catch (error: Exception) { fail(error.message ?: "Could not start Bluetooth") }
     }
 
     private fun startScan() {
-        stage = "PiLink の検索"
-        report("PiLink を検索しています…")
-        val scanner = adapter?.bluetoothLeScanner ?: error("BLE scanner がありません")
+        stage = "PiLink discovery"
+        report("Searching for PiLink…")
+        val scanner = adapter?.bluetoothLeScanner ?: error("BLE scanner unavailable")
         scanning = true
         scanner.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(PiLinkProfile.SERVICE)).build()),
             ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
@@ -85,39 +94,39 @@ class BleConnection(
                 connect(result.device)
             }
         }
-        override fun onScanFailed(errorCode: Int) = onMain { fail("BLE scan 失敗: $errorCode") }
+        override fun onScanFailed(errorCode: Int) = onMain { fail("BLE scan failed: $errorCode") }
     }
 
     private fun connect(selected: BluetoothDevice) {
         stopScan()
         device = selected
-        stage = "GATT 接続"
-        report("Pi に接続しています… (${selected.address})")
+        stage = "GATT connection"
+        report("Pi connecting: ${selected.address}")
         gatt = selected.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-            ?: error("GATT を開始できません")
+            ?: error("Could not start GATT")
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(current: BluetoothGatt, status: Int, newState: Int) = onMain {
             if (gatt === current) {
-                if (status != BluetoothGatt.GATT_SUCCESS) fail("GATT 接続エラー: $status")
+                if (status != BluetoothGatt.GATT_SUCCESS) fail("GATT connection error: $status")
                 else if (newState == BluetoothProfile.STATE_CONNECTED) {
                     stage = "Service discovery"
-                    check(current.discoverServices()) { "Service discovery を開始できません" }
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) fail("Pi の BLE 接続が切れました")
+                    check(current.discoverServices()) { "Could not start service discovery" }
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) fail("Pi BLE connection disconnected")
             }
         }
 
         override fun onServicesDiscovered(current: BluetoothGatt, status: Int) = onMain {
             if (gatt === current) {
-                check(status == BluetoothGatt.GATT_SUCCESS) { "Service discovery エラー: $status" }
-                val service = current.getService(PiLinkProfile.SERVICE) ?: error("PiLink Service がありません")
+                check(status == BluetoothGatt.GATT_SUCCESS) { "Service discovery error: $status" }
+                val service = current.getService(PiLinkProfile.SERVICE) ?: error("PiLink service missing")
                 for (uuid in PiLinkProfile.READ_ORDER) {
-                    check(service.getCharacteristic(uuid) != null) { "GATT characteristic がありません: $uuid" }
+                    check(service.getCharacteristic(uuid) != null) { "GATT characteristic missing: $uuid" }
                 }
                 readOrder = PiLinkProfile.READ_ORDER + if (service.getCharacteristic(PiLinkProfile.HOSTNAME) != null)
                     listOf(PiLinkProfile.HOSTNAME) else emptyList()
-                stage = "GATT 設定の読み取り"
+                stage = "Reading GATT settings"
                 readNext()
             }
         }
@@ -135,8 +144,8 @@ class BleConnection(
 
     private fun receive(current: BluetoothGatt, uuid: UUID, bytes: ByteArray, status: Int) = onMain {
         if (gatt === current && readIndex < readOrder.size) {
-            check(status == BluetoothGatt.GATT_SUCCESS) { "GATT 読み取りエラー: $status" }
-            check(uuid == readOrder[readIndex]) { "GATT 応答の順序が不正です" }
+            check(status == BluetoothGatt.GATT_SUCCESS) { "GATT read error: $status" }
+            check(uuid == readOrder[readIndex]) { "Unexpected GATT response order" }
             values[uuid] = bytes
             readIndex++
             readNext()
@@ -152,6 +161,7 @@ class BleConnection(
                 excluded.add(device!!.address)
                 val previous = gatt
                 gatt = null; device = null; values.clear(); readIndex = 0
+                powerPolicy.disconnected()
                 previous?.disconnect(); previous?.close()
                 startScan()
                 return
@@ -159,21 +169,22 @@ class BleConnection(
             val decoded = PiLinkProfile.decode(values, requiredCapability)
             profile = decoded
             handler.removeCallbacks(timeout)
+            powerPolicy.connected()
             report("GATT: version=${decoded.version}, PSM=${decoded.psm}, capabilities=${decoded.capabilities}")
             ready(decoded, device!!.address)
             return
         }
-        val current = gatt ?: error("GATT 接続がありません")
+        val current = gatt ?: error("No GATT connection")
         val characteristic = current.getService(PiLinkProfile.SERVICE).getCharacteristic(readOrder[readIndex])
-        check(current.readCharacteristic(characteristic)) { "GATT read を開始できません" }
+        check(current.readCharacteristic(characteristic)) { "Could not start GATT read" }
     }
 
     fun openChannel(connected: (BluetoothSocket) -> Unit) {
         if (stopped || socket != null) return
         try {
-            stage = "L2CAP 接続"
-            val selected = device ?: error("Pi が未接続です")
-            val decoded = profile ?: error("GATT が未取得です")
+            stage = "L2CAP connection"
+            val selected = device ?: error("Pi is not connected")
+            val decoded = profile ?: error("GATT settings unavailable")
             val channel = selected.createInsecureL2capChannel(decoded.psm)
             socket = channel
             handler.postDelayed(timeout, 30000)
@@ -186,9 +197,9 @@ class BleConnection(
                             connected(channel)
                         }
                     }
-                } catch (error: Exception) { onMain { fail("L2CAP 接続失敗: ${error.message}") } }
+                } catch (error: Exception) { onMain { fail("L2CAP connection failed: ${error.message}") } }
             }
-        } catch (error: Exception) { fail(error.message ?: "L2CAP を開始できません") }
+        } catch (error: Exception) { fail(error.message ?: "Could not start L2CAP") }
     }
 
     private fun stopScan() {
@@ -207,6 +218,7 @@ class BleConnection(
     fun close() {
         if (stopped) return
         stopped = true
+        powerPolicy.disconnected()
         handler.removeCallbacks(timeout)
         runCatching { stopScan() }
         runCatching { socket?.close() }

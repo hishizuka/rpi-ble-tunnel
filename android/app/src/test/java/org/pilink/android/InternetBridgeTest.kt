@@ -21,7 +21,8 @@ class InternetBridgeTest {
         val failed = AtomicReference<String>()
         val active = AtomicBoolean()
         val bridge = MuxBridge(wire.getInputStream(), wire.getOutputStream(), { wire.close() }, 127, 0,
-            {}, { failed.set(it) }, active = { active.set(it) }, allowInternet = true, resolve = resolve, connectTimeoutMillis = timeout)
+            {}, { failed.set(it) }, active = { active.set(it) }, allowInternet = true, resolve = resolve,
+            connectTimeoutMillis = timeout, powerSaving = true)
         init { bridge.start() }
         fun send(frame: MuxFrame) { peer.getOutputStream().write(frame.encode(true)) }
         fun read() = MuxFrame.read(peer.getInputStream(), true)

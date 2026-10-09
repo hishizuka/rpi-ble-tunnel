@@ -21,26 +21,26 @@ data class PiLinkProfile(val version: Int, val psm: Int, val capabilities: Long)
             capabilities and INTERNET != 0L -> INTERNET
             capabilities and MUX != 0L -> MUX
             capabilities and SSH != 0L -> SSH
-            else -> throw IllegalArgumentException("Pi が対応する接続方式を提供していません")
+            else -> throw IllegalArgumentException("Pi has no supported connection mode")
         }
 
         fun decode(values: Map<UUID, ByteArray>, requiredCapability: Long = SSH): PiLinkProfile {
             fun buffer(uuid: UUID, length: Int): ByteBuffer {
-                val bytes = values[uuid] ?: error("GATT の値がありません: $uuid")
-                require(bytes.size == length) { "GATT の長さが不正です: $uuid" }
+                val bytes = values[uuid] ?: error("GATT value missing: $uuid")
+                require(bytes.size == length) { "Invalid GATT value length: $uuid" }
                 return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             }
             val version = buffer(VERSION, 2).short.toInt() and 0xffff
             val psm = buffer(PSM, 2).short.toInt() and 0xffff
             val capabilities = buffer(CAPABILITIES, 4).int.toLong() and 0xffffffffL
-            require(version == 1) { "未対応の protocol version: $version" }
-            require(psm in 0x80..0xff) { "不正な LE PSM: $psm" }
+            require(version == 1) { "Unsupported protocol version: $version" }
+            require(psm in 0x80..0xff) { "Invalid LE PSM: $psm" }
             if (requiredCapability == AUTO) selectCapability(capabilities)
             require(capabilities and requiredCapability == requiredCapability) {
                 when (requiredCapability) {
-                    INTERNET -> "Pi が Internet モードではありません"
-                    MUX -> "Pi が多重化モードではありません"
-                    else -> "Pi が SSH モードではありません"
+                    INTERNET -> "Pi is not in Internet mode"
+                    MUX -> "Pi is not in multiplex mode"
+                    else -> "Pi is not in SSH mode"
                 }
             }
             return PiLinkProfile(version, psm, capabilities)

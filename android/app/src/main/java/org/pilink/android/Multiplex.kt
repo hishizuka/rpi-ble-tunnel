@@ -18,7 +18,7 @@ enum class MuxType(val wire: Int) {
 
 data class MuxFrame(val type: MuxType, val id: Long, val payload: ByteArray = byteArrayOf()) {
     val value: Long get() {
-        require(payload.size == 4) { "多重化の整数長が不正です" }
+        require(payload.size == 4) { "Invalid multiplex integer length" }
         return ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xffffffffL
     }
     fun encode(allowInternet: Boolean = false): ByteArray {
@@ -35,15 +35,15 @@ data class MuxFrame(val type: MuxType, val id: Long, val payload: ByteArray = by
         }
         private fun validate(type: MuxType, id: Long, length: Int, allowInternet: Boolean) {
             val control = type == MuxType.PING || type == MuxType.PONG
-            require(if (control) id == 0L else id in 1..0xffffffffL && (allowInternet || id and 1L == 1L)) { "多重化 stream ID が不正です" }
-            require(type != MuxType.OPEN_TCP || allowInternet && id and 1L == 0L) { "Internet の stream ID が不正です" }
-            require(type != MuxType.OPEN || id and 1L == 1L) { "SSH の stream ID が不正です" }
+            require(if (control) id == 0L else id in 1..0xffffffffL && (allowInternet || id and 1L == 1L)) { "Invalid multiplex stream ID" }
+            require(type != MuxType.OPEN_TCP || allowInternet && id and 1L == 0L) { "Invalid Internet stream ID" }
+            require(type != MuxType.OPEN || id and 1L == 1L) { "Invalid SSH stream ID" }
             require(when (type) {
                 MuxType.DATA -> length in 1..MuxLimits.DATA
                 MuxType.FIN -> length == 0
                 MuxType.OPEN_TCP -> length in 9..MuxLimits.DATA
                 else -> length == 4
-            }) { "多重化フレームの長さが不正です" }
+            }) { "Invalid multiplex frame length" }
         }
         fun read(input: InputStream, allowInternet: Boolean = false): MuxFrame {
             fun exact(length: Int): ByteArray {
@@ -51,7 +51,7 @@ data class MuxFrame(val type: MuxType, val id: Long, val payload: ByteArray = by
                 var offset = 0
                 while (offset < length) {
                     val count = input.read(bytes, offset, length - offset)
-                    if (count < 0) throw EOFException("多重化の通信路が切断されました")
+                    if (count < 0) throw EOFException("Multiplex connection closed")
                     if (count == 0) continue
                     offset += count
                 }
@@ -59,10 +59,10 @@ data class MuxFrame(val type: MuxType, val id: Long, val payload: ByteArray = by
             }
             val header = exact(MuxLimits.HEADER)
             require(header[0] == 80.toByte() && header[1] == 76.toByte() && header[2] == 1.toByte()) {
-                "多重化の magic / version が不正です"
+                "Invalid multiplex magic / version"
             }
             val type = MuxType.entries.firstOrNull { it.wire == header[3].toInt() }
-                ?: error("多重化の type が不正です")
+                ?: error("Invalid multiplex type")
             val integers = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
             val id = integers.getInt(4).toLong() and 0xffffffffL
             val length = integers.getInt(8)
@@ -79,7 +79,7 @@ class MuxBuffer(private val capacity: Int = MuxLimits.WINDOW) {
     var size: Int = 0
         private set
     fun append(data: ByteArray) {
-        require(data.size <= capacity - size) { "多重化バッファの上限を超えました" }
+        require(data.size <= capacity - size) { "Multiplex buffer limit exceeded" }
         for (i in data.indices) bytes[(offset + size + i) % capacity] = data[i]
         size += data.size
     }
@@ -124,14 +124,14 @@ class MuxCore(private val allowInternet: Boolean = false) {
     val count: Int get() = table.size
     fun contains(stream: MuxStream) = table[stream.id] === stream
     fun open(): MuxStream {
-        check(count < MuxLimits.STREAMS && nextID < 0xffffffffL) { "同時接続は 8 本までです" }
+        check(count < MuxLimits.STREAMS && nextID < 0xffffffffL) { "Concurrent connection limit: 8" }
         val stream = MuxStream(nextID)
         nextID += 2
         table[stream.id] = stream
         return stream
     }
     fun queue(stream: MuxStream, bytes: ByteArray) {
-        require(contains(stream) && bytes.isNotEmpty() && bytes.size <= stream.readAllowance) { "多重化の送信枠を超えました" }
+        require(contains(stream) && bytes.isNotEmpty() && bytes.size <= stream.readAllowance) { "Multiplex send window exceeded" }
         stream.outgoing.append(bytes)
     }
     fun consume(stream: MuxStream, count: Int) {
@@ -161,16 +161,16 @@ class MuxCore(private val allowInternet: Boolean = false) {
     fun takeRetired(): List<Long> = retired.toList().also { retired.clear() }
     fun receive(frame: MuxFrame) {
         if (frame.type == MuxType.PING || frame.type == MuxType.PONG) {
-            if (frame.type == MuxType.PING) { check(pong == null) { "PING の待機枠を超えました" }; pong = frame.value }
+            if (frame.type == MuxType.PING) { check(pong == null) { "Pending PING limit exceeded" }; pong = frame.value }
             return
         }
-        require(frame.type != MuxType.OPEN) { "Pi からの OPEN は未対応です" }
+        require(frame.type != MuxType.OPEN) { "OPEN from Pi is unsupported" }
         if (frame.type == MuxType.OPEN_TCP) {
-            require(allowInternet && frame.id > highestEven && frame.id and 1L == 0L) { "OPEN_TCP の ID が不正です" }
+            require(allowInternet && frame.id > highestEven && frame.id and 1L == 0L) { "Invalid OPEN_TCP ID" }
             val destination = MuxDestination.decode(frame.payload)
             highestEven = frame.id
             if (count >= MuxLimits.STREAMS) {
-                check(rejected.size < 16) { "OPEN_TCP の拒否待機枠を超えました" }
+                check(rejected.size < 16) { "Pending OPEN_TCP rejection limit exceeded" }
                 rejected.addLast(frame.id)
                 return
             }
@@ -181,35 +181,35 @@ class MuxCore(private val allowInternet: Boolean = false) {
             }
             return
         }
-        require(frame.id and 1L == 1L || allowInternet) { "stream ID が不正です" }
+        require(frame.id and 1L == 1L || allowInternet) { "Invalid stream ID" }
         val stream = table[frame.id]
         if (stream == null) {
-            require(if (frame.id and 1L == 1L) frame.id < nextID else frame.id <= highestEven) { "未発行の stream ID です" }
+            require(if (frame.id and 1L == 1L) frame.id < nextID else frame.id <= highestEven) { "Unissued stream ID" }
             return
         }
         if (frame.type == MuxType.RESET) { retire(stream); return }
         if (stream.reset != null) return
         when (frame.type) {
             MuxType.OK -> {
-                require(stream.destination == null && stream.openSent && !stream.acknowledged && frame.value == MuxLimits.WINDOW.toLong()) { "OPEN_OK が不正です" }
+                require(stream.destination == null && stream.openSent && !stream.acknowledged && frame.value == MuxLimits.WINDOW.toLong()) { "Invalid OPEN_OK" }
                 stream.acknowledged = true
                 stream.credit = MuxLimits.WINDOW
             }
             MuxType.DATA -> {
-                require(stream.acknowledged && !stream.remoteEOF && frame.payload.size <= stream.receiveCredit) { "受信枠超過または FIN 後の DATA です" }
+                require(stream.acknowledged && !stream.remoteEOF && frame.payload.size <= stream.receiveCredit) { "DATA exceeds receive window or follows FIN" }
                 stream.received.append(frame.payload)
                 stream.receiveCredit -= frame.payload.size
             }
             MuxType.WINDOW -> {
-                require(stream.acknowledged && frame.value in 1..(MuxLimits.WINDOW - stream.credit).toLong()) { "WINDOW が不正です" }
+                require(stream.acknowledged && frame.value in 1..(MuxLimits.WINDOW - stream.credit).toLong()) { "Invalid WINDOW" }
                 stream.credit += frame.value.toInt()
             }
             MuxType.FIN -> {
-                require(stream.acknowledged && !stream.remoteEOF) { "FIN が不正です" }
+                require(stream.acknowledged && !stream.remoteEOF) { "Invalid FIN" }
                 stream.remoteEOF = true
                 reap(stream)
             }
-            else -> error("予期しない多重化フレームです")
+            else -> error("Unexpected multiplex frame")
         }
     }
     fun nextFrame(): MuxFrame? {

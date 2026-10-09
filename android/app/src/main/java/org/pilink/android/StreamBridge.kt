@@ -23,7 +23,7 @@ class StreamBridge(
     private val remaining = AtomicInteger(2)
     private val toBLE = AtomicLong()
     private val toTCP = AtomicLong()
-    @Volatile private var reason = "接続終了"
+    @Volatile private var reason = "Connection closed"
 
     fun start() {
         check(started.compareAndSet(false, true))
