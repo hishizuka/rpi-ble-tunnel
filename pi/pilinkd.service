@@ -7,7 +7,7 @@ StartLimitIntervalSec=60
 StartLimitBurst=10
 
 [Service]
-Type=simple
+Type=exec
 ExecStart=/usr/local/libexec/pilink-network service --adapter hci0 --mode internet
 ExecStopPost=/usr/local/libexec/pilink-network cleanup
 Restart=on-failure

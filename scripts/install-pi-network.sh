@@ -5,18 +5,32 @@ task_script=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basena
 task_root=$(CDPATH= cd -- "$(dirname -- "$task_script")/.." && pwd)
 
 usage() {
-    printf 'Usage: bash %s [--skip-deps]\n' "$task_script"
+    printf 'Usage: bash %s [--skip-deps] [--caller-managed]\n' "$task_script"
     printf 'Install dependencies, build and test, then enable pilinkd.service.\n'
     printf '  --skip-deps  Use dependencies already installed by the caller.\n'
+    printf '  --caller-managed  Let the caller select the BLE adapter and start PiLink.\n'
 }
 if [[ $# == 1 && ( "$1" == --help || "$1" == -h ) ]]; then usage; exit 0; fi
+task_skip_deps=false
+task_caller_managed=false
+while [[ $# -gt 0 && "$1" == --* ]]; do
+    case "$1" in
+        --skip-deps) task_skip_deps=true ;;
+        --caller-managed) task_caller_managed=true ;;
+        *) usage >&2; exit 2 ;;
+    esac
+    shift
+done
 if [[ $(uname -s) != Linux || ! -d /run/systemd/system ]]; then
     printf 'This installer requires Raspberry Pi OS with systemd.\n' >&2
     exit 2
 fi
 export PATH="${PATH:-/usr/bin:/bin}:/usr/sbin:/sbin"
+if [[ -f /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf ]]; then
+    task_caller_managed=true
+fi
 
-if [[ $# == 0 || ( $# == 1 && "$1" == --skip-deps ) ]]; then
+if [[ $# == 0 ]]; then
     task_sudo=()
     if [[ $EUID -ne 0 ]]; then
         task_sudo=(sudo -n)
@@ -35,7 +49,7 @@ if [[ $# == 0 || ( $# == 1 && "$1" == --skip-deps ) ]]; then
     exec 9>"$task_cache/install.lock"
     flock -n 9 || { printf 'Another PiLink installer is running for this checkout.\n' >&2; exit 2; }
 
-    if [[ $# == 0 ]]; then
+    if [[ "$task_skip_deps" == false ]]; then
         printf 'Installing build and runtime dependencies...\n'
         "${task_sudo[@]}" apt-get update
         "${task_sudo[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-upgrade \
@@ -73,11 +87,15 @@ if [[ $# == 0 || ( $# == 1 && "$1" == --skip-deps ) ]]; then
     cmake --build "$task_build" --parallel 1
     ctest --test-dir "$task_build" --output-on-failure
     PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/pilink-network.py"
+    PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/pilink-service-control.py"
+    /usr/bin/python3 -m unittest discover -s "$task_root/tests" -p 'test_*.py'
     printf 'Building hev-socks5-tunnel...\n'
     make -C "$task_cache/hev-socks5-tunnel-$task_hev_version" -j1
 
     if [[ $EUID -ne 0 ]]; then
-        "${task_sudo[@]}" bash "$task_script" "$task_build" "$task_hev"
+        task_install_options=()
+        if [[ "$task_caller_managed" == true ]]; then task_install_options+=(--caller-managed); fi
+        "${task_sudo[@]}" bash "$task_script" "${task_install_options[@]}" "$task_build" "$task_hev"
         exit 0
     fi
 elif [[ $# == 2 && "$1" != -* && "$2" != -* ]]; then
@@ -105,8 +123,10 @@ task_help=$("$task_build/pilinkd" --help)
 [[ "$task_help" == *--state-file* ]]
 # Prepare only the dependencies required for the BLE and SSH endpoints.
 systemctl start bluetooth.service NetworkManager.service
-rfkill unblock bluetooth
-busctl --system set-property org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered b true
+if [[ "$task_caller_managed" == false ]]; then
+    rfkill unblock bluetooth
+    busctl --system set-property org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered b true
+fi
 systemctl enable --now ssh.service
 task_daemon_active=$(systemctl is-active pilinkd.service || true)
 task_daemon_enabled=$(systemctl is-enabled pilinkd.service 2>/dev/null || true)
@@ -117,11 +137,13 @@ task_backup=$(mktemp -d /var/backups/pilink-0.1.0-XXXXXXXX)
 task_paths=(
     /usr/local/bin/pilinkd
     /usr/local/libexec/pilink-network
+    /usr/local/libexec/pilink-service-control
     /usr/local/libexec/hev-socks5-tunnel
     /usr/local/share/doc/pilink/LICENSE
     /usr/local/share/doc/pilink/hev-socks5-tunnel-LICENSE.txt
     /etc/systemd/system/pilinkd.service
     /etc/systemd/system/pilink-network.service
+    /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf
 )
 for task_path in "${task_paths[@]}"; do
     if [[ -e "$task_path" ]]; then cp -a --parents "$task_path" "$task_backup/"; fi
@@ -174,13 +196,23 @@ fi
 install -d -m 755 /usr/local/libexec /usr/local/share/doc/pilink
 install -m 755 "$task_build/pilinkd" /usr/local/bin/pilinkd
 install -m 755 "$task_root/pi/pilink-network.py" /usr/local/libexec/pilink-network
+install -m 755 "$task_root/pi/pilink-service-control.py" /usr/local/libexec/pilink-service-control
 if [[ "$(readlink -f "$task_hev")" != /usr/local/libexec/hev-socks5-tunnel ]]; then
     install -m 755 "$task_hev" /usr/local/libexec/hev-socks5-tunnel
 fi
 install -m 644 "$task_root/LICENSE" "$task_root/pi/hev-socks5-tunnel-LICENSE.txt" /usr/local/share/doc/pilink/
 install -m 644 "$task_root/pi/pilinkd.service" /etc/systemd/system/pilinkd.service
+if [[ "$task_caller_managed" == true ]]; then
+    install -d -m 755 /etc/systemd/system/pilinkd.service.d
+    install -m 644 "$task_root/pi/pilink-caller-adapter.conf" /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf
+fi
 rm -f /etc/systemd/system/pilink-network.service
 systemctl daemon-reload
+if [[ "$task_caller_managed" == true ]]; then
+    trap - ERR INT TERM
+    printf 'Installed caller-managed PiLink. Select an adapter through pilink-service-control to start. Backup: %s\n' "$task_backup"
+    exit 0
+fi
 systemctl enable pilinkd.service
 systemctl restart pilinkd.service
 task_deadline=$((SECONDS + 60))
