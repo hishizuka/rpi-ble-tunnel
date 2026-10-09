@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <poll.h>
 
 #define MUX_STREAMS 8
 #define MUX_SOCKS_PENDING 128
@@ -11,6 +12,7 @@
 #define MUX_WINDOW 16384
 #define MUX_DATA 1024
 #define MUX_HEADER 12
+#define MUX_POLL_MAX (MUX_STREAMS + MUX_SOCKS_PENDING + 2)
 
 enum mux_type { MUX_OPEN = 1, MUX_OK, MUX_BYTES, MUX_WINDOW_UPDATE,
                 MUX_FIN, MUX_RESET, MUX_PING, MUX_PONG, MUX_OPEN_TCP };
@@ -34,6 +36,10 @@ int mux_tcp_step(struct mux_server *server);
 size_t mux_next_frame(struct mux_server *server, uint8_t bytes[MUX_HEADER + MUX_DATA]);
 /* Drive a nonblocking wire socket. Return -1 on error or wire EOF. */
 int mux_pump(struct mux_server *server, int wire, bool packet, size_t mtu);
+/* Build useful I/O interests without spinning on backpressured or pipelined data. */
+size_t mux_pollfds(const struct mux_server *server, int wire, struct pollfd fds[MUX_POLL_MAX]);
+/* Milliseconds to the next deadline/internal work, or -1 for an event-only wait. */
+int mux_poll_timeout(const struct mux_server *server);
 size_t mux_active(const struct mux_server *server);
 
 #endif

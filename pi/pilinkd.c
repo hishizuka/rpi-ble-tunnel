@@ -425,16 +425,68 @@ static gboolean client_ready(gint fd, GIOCondition condition, gpointer user_data
     return G_SOURCE_REMOVE;
 }
 
-static gboolean mux_ready(gpointer user_data)
+struct mux_source {
+    GSource source;
+    struct daemon *daemon;
+    GPollFD fds[MUX_POLL_MAX];
+    size_t count;
+};
+
+static void mux_update_watch(GSource *source)
 {
-    struct daemon *d = user_data;
+    struct mux_source *watch = (struct mux_source *)source;
+    struct pollfd fds[MUX_POLL_MAX];
+    size_t count = mux_pollfds(watch->daemon->mux, watch->daemon->client, fds);
+    gboolean changed = count != watch->count;
+    for (size_t i = 0; i < count && !changed; ++i)
+        changed = watch->fds[i].fd != fds[i].fd || watch->fds[i].events != fds[i].events;
+    if (!changed) return;
+    for (size_t i = 0; i < watch->count; ++i) g_source_remove_poll(source, &watch->fds[i]);
+    watch->count = count;
+    for (size_t i = 0; i < watch->count; ++i) {
+        watch->fds[i] = (GPollFD){.fd = fds[i].fd, .events = fds[i].events};
+        g_source_add_poll(source, &watch->fds[i]);
+    }
+}
+
+static gboolean mux_prepare(GSource *source, gint *timeout)
+{
+    /* Rebuilding watches here would wake GLib's own poll on every idle iteration. */
+    *timeout = mux_poll_timeout(((struct mux_source *)source)->daemon->mux);
+    return *timeout == 0;
+}
+
+static gboolean mux_check(GSource *source)
+{
+    struct mux_source *watch = (struct mux_source *)source;
+    for (size_t i = 0; i < watch->count; ++i) if (watch->fds[i].revents) return TRUE;
+    return mux_poll_timeout(watch->daemon->mux) == 0;
+}
+
+static gboolean mux_dispatch(GSource *source, GSourceFunc callback, gpointer user_data)
+{
+    (void)callback; (void)user_data;
+    struct daemon *d = ((struct mux_source *)source)->daemon;
     if (mux_pump(d->mux, d->client, true, d->mux_mtu) < 0) {
         g_printerr("Multiplex transport: %s\n", g_strerror(errno));
         d->mux_source = 0;
         disconnect_client(d);
         return G_SOURCE_REMOVE;
     }
+    mux_update_watch(source);
     return G_SOURCE_CONTINUE;
+}
+
+static guint watch_mux(struct daemon *d)
+{
+    static GSourceFuncs functions = {.prepare = mux_prepare, .check = mux_check, .dispatch = mux_dispatch};
+    GSource *source = g_source_new(&functions, sizeof(struct mux_source));
+    ((struct mux_source *)source)->daemon = d;
+    mux_update_watch(source);
+    g_source_set_name(source, "PiLink multiplex I/O");
+    guint id = g_source_attach(source, g_main_loop_get_context(d->loop));
+    g_source_unref(source);
+    return id;
 }
 
 static gboolean accept_client(gint fd, GIOCondition condition, gpointer user_data)
@@ -482,7 +534,7 @@ static gboolean accept_client(gint fd, GIOCondition condition, gpointer user_dat
             disconnect_client(d);
         } else {
             if (d->internet_mode) g_print("SOCKS5 READY 127.0.0.1:%u -> BLE -> Central TCP\n", d->socks_port);
-            d->mux_source = g_timeout_add(10, mux_ready, d);
+            d->mux_source = watch_mux(d);
             if (d->internet_mode) publish_link_state(d, TRUE);
         }
     } else if (d->ssh_mode) start_ssh_bridge(d, mtu);

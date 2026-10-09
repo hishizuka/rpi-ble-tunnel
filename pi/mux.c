@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@ struct mux_stream {
     double deadline;
     uint8_t incoming[MUX_WINDOW], outgoing[MUX_DATA];
     size_t incoming_length, incoming_offset, outgoing_length;
-    bool initiator, open_sent, rejected;
+    bool initiator, open_sent, rejected, peeked;
     uint8_t destination[264], reply[10];
     size_t destination_length, reply_length, reply_offset;
 };
@@ -33,7 +34,7 @@ struct socks_pending {
     uint8_t input[264], reply[10];
     size_t length, target, reply_length, reply_offset;
     bool close_after_reply;
-    bool ready;
+    bool ready, peeked;
     uint64_t ticket;
     double deadline;
 };
@@ -419,10 +420,14 @@ static int socks_step(struct mux_server *m)
             if (p->close_after_reply) { pending_release(p); continue; }
         }
         if (p->ready) {
+            struct pollfd waiting = {.fd = p->fd};
+            if (poll(&waiting, 1, 0) < 0) { if (errno == EINTR) continue; return -1; }
+            if (waiting.revents & (POLLHUP | POLLERR | POLLNVAL)) { pending_release(p); continue; }
             uint8_t byte;
             ssize_t n = recv(p->fd, &byte, 1, MSG_PEEK);
             if (!n || (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
                 pending_release(p);
+            else if (n > 0) p->peeked = true;
             continue;
         }
         ssize_t n = recv(p->fd, p->input + p->length, p->target - p->length, 0);
@@ -474,10 +479,14 @@ int mux_tcp_step(struct mux_server *m)
             if (s->reset) { reset_stream(s, s->reset); continue; }
         }
         if (s->initiator && !s->acknowledged) {
+            struct pollfd waiting = {.fd = s->fd};
+            if (poll(&waiting, 1, 0) < 0) { if (errno == EINTR) continue; return -1; }
+            if (waiting.revents & (POLLHUP | POLLERR | POLLNVAL)) { reset_stream(s, MUX_CANCEL); continue; }
             uint8_t peek;
             ssize_t n = recv(s->fd, &peek, 1, MSG_PEEK);
             if (!n || (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
                 reset_stream(s, MUX_CANCEL);
+            else if (n > 0) s->peeked = true;
             continue;
         }
         struct pollfd p = {.fd = s->fd};
@@ -597,6 +606,70 @@ size_t mux_active(const struct mux_server *m)
     size_t count = 0;
     for (size_t i = 0; i < MUX_STREAMS; ++i) if (m->streams[i].id) ++count;
     return count;
+}
+
+static bool output_ready(const struct mux_server *m)
+{
+    if (m->output_length || m->rejection_count || m->pong_pending) return true;
+    for (size_t i = 0; i < MUX_STREAMS; ++i) {
+        const struct mux_stream *s = &m->streams[i];
+        if (!s->id || s->rejected || (s->reset && s->reply_length)) continue;
+        if (s->reset || (s->initiator && !s->open_sent) ||
+            (!s->initiator && !s->connecting && !s->acknowledged) ||
+            s->window || s->outgoing_length || (s->local_fin && !s->fin_sent)) return true;
+    }
+    return false;
+}
+
+size_t mux_pollfds(const struct mux_server *m, int wire, struct pollfd fds[MUX_POLL_MAX])
+{
+    size_t count = 0;
+    fds[count++] = (struct pollfd){.fd = wire, .events = POLLIN | (output_ready(m) ? POLLOUT : 0)};
+    if (m->socks_listener >= 0)
+        fds[count++] = (struct pollfd){.fd = m->socks_listener, .events = POLLIN};
+    for (size_t i = 0; i < MUX_STREAMS; ++i) {
+        const struct mux_stream *s = &m->streams[i];
+        if (!s->id || s->fd < 0) continue;
+        short events = 0;
+        bool waiting = s->initiator && !s->acknowledged;
+        if (s->reply_length || s->connecting || s->incoming_length > s->incoming_offset) events |= POLLOUT;
+        if (waiting && !s->peeked && !s->reply_length) events |= POLLIN;
+        if (s->acknowledged && !s->local_fin && !s->outgoing_length && s->credit) events |= POLLIN;
+        /* A backpressured stream must not spin on HUP before its buffered data drains. */
+        if (events || waiting) fds[count++] = (struct pollfd){.fd = s->fd, .events = events};
+    }
+    for (size_t i = 0; i < MUX_SOCKS_PENDING; ++i) {
+        const struct socks_pending *p = &m->pending[i];
+        if (p->fd < 0) continue;
+        short events = p->reply_length ? POLLOUT : ((!p->ready || !p->peeked) ? POLLIN : 0);
+        fds[count++] = (struct pollfd){.fd = p->fd, .events = events};
+    }
+    return count;
+}
+
+int mux_poll_timeout(const struct mux_server *m)
+{
+    double deadline = -1;
+    size_t free_slots = 0, external = 0;
+    for (size_t i = 0; i < MUX_STREAMS; ++i) {
+        const struct mux_stream *s = &m->streams[i];
+        if (!s->id) { free_slots++; continue; }
+        if (s->initiator) external++;
+        if (s->fd >= 0 && !s->reset && !s->rejected &&
+            (s->connecting || (s->initiator && !s->acknowledged)) &&
+            (deadline < 0 || s->deadline < deadline)) deadline = s->deadline;
+    }
+    for (size_t i = 0; i < MUX_SOCKS_PENDING; ++i) {
+        const struct socks_pending *p = &m->pending[i];
+        if (p->fd < 0) continue;
+        /* Promote queued requests without waiting for an unrelated socket event. */
+        if (p->ready && free_slots && external < MUX_STREAMS - 1) return 0;
+        if (deadline < 0 || p->deadline < deadline) deadline = p->deadline;
+    }
+    if (deadline < 0) return -1;
+    double remaining = (deadline - monotonic_time()) * 1000;
+    if (remaining <= 0) return 0;
+    return remaining >= INT_MAX ? INT_MAX : (int)remaining + 1;
 }
 
 int mux_pump(struct mux_server *m, int wire, bool packet, size_t mtu)
