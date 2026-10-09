@@ -44,6 +44,16 @@ Deployment from a Mac copies the source to `~/rpi-ble-tunnel`. When specifying t
 ./scripts/deploy-pi.sh pi@PI_IP raspberrypi.local
 ```
 
+## Caller-managed adapter selection
+
+Install with `bash scripts/install-pi-network.sh --caller-managed`. This adds the generic `/usr/local/libexec/pilink-service-control` command and a systemd drop-in. It does not unblock Bluetooth, power a fixed hci0, or enable/start PiLink. The service does not read the caller's repository, Python environment, or settings file.
+
+Use `sudo -n /usr/local/libexec/pilink-service-control apply --adapter hciN` to prepare the selected controller and enable/start the service. Reapplying the same running controller does not restart it. The other commands are `status`, `stop` (temporary), and `disable` (stop and disable automatic startup). Results are JSON; `adapter_unavailable` identifies controller preparation failures that a caller may use for fallback. Other errors must not trigger adapter fallback. No command unblocks rfkill.
+
+The service uses `Type=exec` so status is collected after its process has executed. This prevents an immediate adapter switch from returning `adapter=null` while the process is still being prepared. Check `READY` in the service log to confirm BLE advertising has started.
+
+The controller name and address are held in `/run/pilink-control/adapter.env` and checked before service startup. After OS reboot a caller must select the adapter again. Reinstall in caller-managed mode for updates, then let the caller reapply its settings. To restore standalone operation, remove `/etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf`, run `systemctl daemon-reload`, and enable/start the original service.
+
 ## TUN, routes, and DNS
 
 ```text

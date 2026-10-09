@@ -44,6 +44,23 @@ Mac からの転送先は `~/rpi-ble-tunnel` です。管理用 SSH を IP ア�
 ./scripts/deploy-pi.sh pi@PI_IP raspberrypi.local
 ```
 
+## 呼び出し元からアダプターを指定する連携モード
+
+`bash scripts/install-pi-network.sh --caller-managed` で汎用のサービス操作コマンドと systemd drop-in を導入します。このモードでは Bluetooth の rfkill 解除、hci0 の固定電源操作、PiLink の有効化・起動を行いません。呼び出し元アプリの設定ファイルやリポジトリをサービスから参照せず、同じコマンドを手動でも利用できます。
+
+```bash
+sudo -n /usr/local/libexec/pilink-service-control apply --adapter hci1
+sudo -n /usr/local/libexec/pilink-service-control status
+sudo -n /usr/local/libexec/pilink-service-control stop
+sudo -n /usr/local/libexec/pilink-service-control disable
+```
+
+`apply` は指定対象を準備してから有効化・起動し、同じ対象で稼働中なら再起動しません。`stop` は一時停止、`disable` は停止と自動起動の無効化です。結果は JSON で返し、起動前の対象不在・電源準備失敗などは `adapter_unavailable`、それ以外の失敗は別の理由として返します。rfkill はこれらの操作で解除しません。
+
+サービスは `Type=exec` で起動し、プロセス実行後に状態を取得します。これにより、切り替え直後の実行準備中に `adapter=null` を返す競合を防ぎます。BLE 広告の開始はサービスログの `READY` で確認します。
+
+アダプター名とアドレスは `/run/pilink-control/adapter.env` に保持し、起動前に現在のコントローラーと照合します。OS 再起動後は呼び出し元が再指定するまで待機します。連携モードの更新は再びこのオプションで導入し、保存設定の反映は呼び出し元が行います。従来の単独運用へ戻す場合は `/etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf` を削除して `systemctl daemon-reload` し、通常の手順で有効化・起動します。
+
 ## TUN・経路・DNS の構成
 
 ```text

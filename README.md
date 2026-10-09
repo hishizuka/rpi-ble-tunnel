@@ -15,7 +15,7 @@ The Pi and client do not need to share a Wi-Fi network.
 
 | Device | Requirements |
 | --- | --- |
-| Raspberry Pi | Raspberry Pi OS, systemd, NetworkManager, and an adapter supporting BLE Peripheral mode and L2CAP CoC. Tested on Pi Zero W / ARMv6 |
+| Raspberry Pi | Raspberry Pi OS, Python 3.9 or later, Linux 5.3 or later, systemd, NetworkManager, and an adapter supporting BLE Peripheral mode and L2CAP CoC. Tested on Pi Zero W / ARMv6 |
 | Android | Android 10 / API 29 or later, with BLE / L2CAP CoC support |
 | Mac | macOS 12 or later, with Bluetooth |
 
@@ -79,11 +79,21 @@ The client is saved to `build/PiLink.app`.
 
 ### Connect from Android
 
-1. Open **Register Pi** (`Piを登録`) in PiLink settings, allow access to nearby devices, and select the Pi's hostname. Android 10 / 11 requires location permission and location services to be enabled.
-2. Select the Pi on the connection screen, tap **Connect** (`接続する`), and allow notifications when prompted.
-3. Use **Open in Termius** (`Termiusで開く`) or **Copy command** (`コマンドをコピー`) to start SSH after connecting. Store SSH credentials in your chosen SSH client.
+1. Open **Add a Pi** in PiLink settings, allow access to nearby devices, select a Pi from the search results, and save a display name. Choose **Enter hostname** to search by hostname alone; the Bluetooth address is read automatically from the selected device. Android 10 / 11 requires location permission and location services to be enabled.
+2. Select the Pi on the connection screen, tap **Connect**, and allow notifications when prompted.
+3. Use **Open in Termius** or **Copy command** to start SSH after connecting. Store SSH credentials in your chosen SSH client.
 
-Point the SSH client at `127.0.0.1` on the Android device. Each registered Pi has an assigned local port, shown on the diagnostics screen. SSH clients other than Termius also work.
+Up to three Bluetooth addresses can be registered. The internal and external adapters of the same Pi can have separate entries, with duplicate display names and hostnames allowed. Display names do not identify the connection or determine the SSH HostKeyAlias. For an older entry without an address, tap **Connect** to search by hostname, select its adapter, and save.
+
+The interface and notifications follow the device language: Japanese for Japanese locales and English otherwise. Technical connection logs are recorded in English for troubleshooting.
+
+**Power saving** in settings is off by default and can be changed while connected. When enabled, Android waits for TCP events instead of checking every 100 ms, retaining DNS and TCP connection deadlines. It requests BLE `LOW_POWER` while no SSH / Internet streams or wire writes are active and `BALANCED` when a connection starts. Turning it off restores `BALANCED` and periodic TCP checks. Open SSH sessions retain their wake lock even when no data is flowing. BLE priority changes are requests to the Bluetooth stack; device support and the resulting power savings vary. If the link becomes unstable, turn this setting off.
+
+The Pi always waits for relay socket readiness and network / process notifications, independently of the Android setting. It wakes for connection deadlines or recovery retries when needed, with no fixed 10 ms relay or 500 ms network-supervision polling.
+
+Changing the adapter on the Pi disconnects the existing BLE link. Stop the Android connection, select the entry for the new address, and connect again. Automatic reconnection continues to use the selected address.
+
+Point the SSH client at `127.0.0.1` on the Android device. Each registered address has an assigned local port, shown on the diagnostics screen. SSH clients other than Termius also work.
 
 Stop the connection from the app or notification. After an unexpected disconnect, the app retries about every two minutes, but existing SSH / TCP sessions are not restored. Power-saving modes may delay retries. The app does not connect automatically after a force-stop or device restart.
 

@@ -25,7 +25,7 @@ Run from the repository root. C tests require CMake 3.16 or later and a C compil
 ./scripts/build-macos.sh
 ```
 
-- `test.sh` runs the C tests. On Mac, it also runs Swift unit tests and C / Swift multiplexing and SOCKS5 integration tests.
+- `test.sh` runs the C and Python tests. On Mac, it also runs Swift unit tests and C / Swift multiplexing and SOCKS5 integration tests.
 - The Android build script produces the APK and runs JVM tests, Lint, and C / Kotlin SOCKS5 integration tests.
 - The Mac build script produces the client. `test.sh` handles Swift verification.
 
@@ -36,6 +36,12 @@ The Pi's `pi/mux.c`, the Mac's `PiLinkCore/Multiplex.swift` / `PiLinkMux/MuxProx
 The test transport substitutes loopback TCP for the wire and splits transfers into 127-byte chunks. C tests use Unix `SOCK_SEQPACKET` on Linux and Unix `SOCK_DGRAM` on Mac to check SDU fragmentation and coalescing. These tests cover framing, TCP relay, and flow control, but do not exercise the BLE stack. Verification using real Pi / Android hardware runs separately.
 
 Android holds a wake lock only while a stream or outgoing frame is active, releasing it after the final FIN is written or on stop. Hardware checks also verify transfers with the screen off and wake-lock release.
+
+### Event-driven Pi supervision
+
+The multiplexing daemon uses a GLib source watching the BLE wire, TCP streams and SOCKS listener / pending clients. Write interest is enabled only while output is pending; backpressured streams stop watching read readiness. The source waits indefinitely when idle and uses the nearest connection deadline while requests are pending. Tests cover idle waits, queued request promotion, pipelined SOCKS data, credit backpressure, half-close and deadline isolation. Linux also tests the production GLib source's idle behavior, packet dispatch and disconnect cleanup.
+
+The network supervisor watches atomic BLE-state replacement through inotify, process exits through pidfds, TUN carrier through route netlink, and NetworkManager changes through `nmcli monitor`. A control socket wakes shutdown immediately. Timed waits are limited to setup deadlines, failed setup retries and monitor restart. This requires Python 3.9 or later and Linux 5.3 or later. Python tests mock network commands; Linux tests exercise the notification APIs with a fake monitor, without changing host networking.
 
 ## Hardware verification tools
 

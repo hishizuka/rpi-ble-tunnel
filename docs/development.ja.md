@@ -25,7 +25,7 @@
 ./scripts/build-macos.sh
 ```
 
-- `test.sh` は C のテストを実行し、Mac では Swift の単体テストと C / Swift の多重化・SOCKS5 結合テストも実行します。
+- `test.sh` は C と Python のテストを実行し、Mac では Swift の単体テストと C / Swift の多重化・SOCKS5 結合テストも実行します。
 - Android のビルドスクリプトは APK、JVM テスト、Lint、C / Kotlin の SOCKS5 結合テストを実行します。
 - Mac のビルドスクリプトはクライアントの生成に使います。Swift の検証は `test.sh` が担当します。
 
@@ -36,6 +36,12 @@ Pi の `pi/mux.c`、Mac の `PiLinkCore/Multiplex.swift` / `PiLinkMux/MuxProxy.s
 検証用 transport は loopback TCP を wire として使い、127バイトに分割して転送します。C のテストは Linux で Unix `SOCK_SEQPACKET`、Mac で Unix `SOCK_DGRAM` を使い、SDU の分割・連結も検証します。フレーム処理・TCP 中継・流量制御を検証できますが、BLE stack は通りません。Pi / Android の実機を操作する検証は別途実行します。
 
 Android は stream または送信中フレームがある間だけ wake lock を保持し、最後の FIN の書き込み後や停止時に解放します。画面 OFF 中の転送と wake lock の解放は実機でも検証します。
+
+### Pi のイベント待ち
+
+多重化 daemon は GLib source で BLE wire、TCP stream、SOCKS listener / 待機中クライアントを監視します。書き込みの監視は送信待ちがある間だけ有効にし、流量制限中の stream は読み込みの監視を止めます。アイドル時は無期限に待ち、接続待ちがある場合は最も近い期限まで待ちます。テストではアイドル待機、待機キューからの接続開始、SOCKS の先行データ、送信枠による流量制御、half-close、接続ごとの期限を検証します。Linux では実際の GLib source のアイドル待機、パケット処理、切断後の解放も検証します。
+
+ネットワーク監視は inotify で BLE 状態ファイルの置換、pidfd でプロセス終了、route netlink で TUN carrier、`nmcli monitor` で NetworkManager の変更を待ちます。停止時は制御用ソケットで直ちに起床します。時間による待機はセットアップ期限、失敗後の再試行、monitor の再起動に限定します。Python 3.9 以上、Linux 5.3 以上が必要です。Python テストはネットワーク操作をモックし、Linux では実際の通知 API と検証用 monitor を使って、ホストのネットワークを変更せず検証します。
 
 ## 実機の検証ツール
 
