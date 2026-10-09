@@ -2,18 +2,7 @@ import CoreBluetooth
 import Darwin
 import Foundation
 import PiLinkCore
-
-func socketFailure(_ operation: String) -> PiLinkError {
-    .invalid("\(operation): \(String(cString: strerror(errno)))")
-}
-
-func configureSocket(_ fd: Int32) -> Bool {
-    let flags = fcntl(fd, F_GETFL)
-    var enabled: Int32 = 1
-    return flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 &&
-        fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 &&
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size)) == 0
-}
+import PiLinkMux
 
 final class SSHClient: NSObject, CommandRunner, BLELinkDelegate {
     private let options: Options
@@ -78,32 +67,12 @@ final class SSHClient: NSObject, CommandRunner, BLELinkDelegate {
             return
         }
         do {
-            let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-            guard fd >= 0 else { throw socketFailure("socket") }
-            var installed = false
-            defer { if !installed { Darwin.close(fd) } }
-            guard configureSocket(fd) else { throw socketFailure("fcntl") }
-            var reuse: Int32 = 1
-            guard setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
-                throw socketFailure("SO_REUSEADDR")
-            }
-            var address = sockaddr_in()
-            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-            address.sin_family = sa_family_t(AF_INET)
-            address.sin_port = options.port.bigEndian
-            address.sin_addr.s_addr = inet_addr("127.0.0.1")
-            let bound = withUnsafePointer(to: &address) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-            guard bound == 0, Darwin.listen(fd, 4) == 0 else { throw socketFailure("127.0.0.1:\(options.port) の listen") }
+            let fd = try openLoopbackListener(port: options.port, backlog: 4)
             let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
             source.setEventHandler { [weak self] in self?.acceptClients() }
             source.setCancelHandler { Darwin.close(fd) }
             listenerFD = fd
             listener = source
-            installed = true
             source.resume()
             print("READY 127.0.0.1:\(options.port) → BLE → Pi 127.0.0.1:22")
         } catch { fail(String(describing: error)) }
@@ -123,11 +92,8 @@ final class SSHClient: NSObject, CommandRunner, BLELinkDelegate {
                 Darwin.close(fd)
                 continue
             }
-            guard configureSocket(fd) else { Darwin.close(fd); continue }
-            var noDelay: Int32 = 1
-            guard setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &noDelay, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
-                Darwin.close(fd); continue
-            }
+            do { try configureTCPSocket(fd) }
+            catch { Darwin.close(fd); continue }
             pendingFD = fd
             armTimeout()
             if link.isReady { link.openChannel() }

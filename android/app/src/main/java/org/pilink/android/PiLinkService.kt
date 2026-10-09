@@ -31,7 +31,7 @@ import androidx.core.content.ContextCompat
 data class LinkState(val running: Boolean = false, val status: String = "", val port: Int = 2222,
                      val log: String = "", val multiplex: Boolean = false, val internet: Boolean = false,
                      val mode: ConnectionMode? = null, val targetName: String = "",
-                     val targetAlias: String = "", val ready: Boolean = false,
+                     val ready: Boolean = false,
                      val retrying: Boolean = false, val targetAddress: String? = null,
                      val targetLabel: String = "", val failed: Boolean = false)
 
@@ -119,7 +119,6 @@ class PiLinkService : Service() {
                     return START_NOT_STICKY
                 }
                 state = LinkState(true, getString(R.string.starting_connection), port, targetName = name,
-                    targetAlias = intent.getStringExtra("host_key_alias") ?: "",
                     targetAddress = address?.let(DeviceProfile::normalizeAddress),
                     targetLabel = intent.getStringExtra("display_name") ?: name)
                 startForeground(NOTIFICATION, notification(state.status), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)

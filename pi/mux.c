@@ -170,15 +170,9 @@ int mux_ssh_connect(uint32_t id, bool *connecting, void *context)
     uint16_t port = context ? *(uint16_t *)context : 22;
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
-    int flags = fcntl(fd, F_GETFL), enabled = 1;
     struct sockaddr_in address = {.sin_family = AF_INET, .sin_port = htons(port),
                                  .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
-    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0 ||
-        fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 ||
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled)) < 0) goto fail;
-#ifdef SO_NOSIGPIPE
-    if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, sizeof(enabled)) < 0) goto fail;
-#endif
+    if (configure_socket(fd) < 0) goto fail;
     int result = connect(fd, (struct sockaddr *)&address, sizeof(address));
     if (result < 0 && errno != EINPROGRESS) goto fail;
     *connecting = result < 0;

@@ -6,8 +6,6 @@
 #include <bluetooth/l2cap.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <arpa/inet.h>
-#include <netinet/tcp.h>
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <signal.h>
@@ -362,24 +360,15 @@ static gboolean tcp_connect_timeout(gpointer user_data)
 
 static void start_ssh_bridge(struct daemon *d, uint16_t mtu)
 {
-    d->tcp = socket(AF_INET, SOCK_STREAM, 0);
-    int no_delay = 1;
-    if (d->tcp < 0 || !configure_fd(d->tcp) ||
-        setsockopt(d->tcp, IPPROTO_TCP, TCP_NODELAY, &no_delay, sizeof(no_delay)) < 0) {
-        g_printerr("SSH TCP socket: %s\n", g_strerror(errno));
-        disconnect_client(d);
-        return;
-    }
-    struct sockaddr_in target = {.sin_family = AF_INET, .sin_port = htons(22)};
-    target.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bridge_init(&d->bridge, d->client, d->tcp, mtu);
-    int result = connect(d->tcp, (struct sockaddr *)&target, sizeof(target));
-    if (result < 0 && errno != EINPROGRESS) {
+    bool connecting;
+    d->tcp = mux_ssh_connect(0, &connecting, NULL);
+    if (d->tcp < 0) {
         g_printerr("SSH TCP connect: %s\n", g_strerror(errno));
         disconnect_client(d);
         return;
     }
-    if (result < 0) {
+    bridge_init(&d->bridge, d->client, d->tcp, mtu);
+    if (connecting) {
         d->tcp_connecting = TRUE;
         d->tcp_source = g_unix_fd_add(d->tcp, G_IO_OUT | G_IO_ERR | G_IO_HUP, ssh_tcp_ready, d);
         d->tcp_timeout = g_timeout_add_seconds(10, tcp_connect_timeout, d);

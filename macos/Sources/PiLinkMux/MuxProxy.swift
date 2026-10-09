@@ -9,16 +9,6 @@ public protocol MuxWire: AnyObject {
     func close()
 }
 
-public func configureMuxSocket(_ fd: Int32) throws {
-    let flags = fcntl(fd, F_GETFL)
-    var enabled: Int32 = 1
-    guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0,
-          fcntl(fd, F_SETFD, FD_CLOEXEC) == 0,
-          setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
-        throw PiLinkError.invalid("socket の設定: \(String(cString: strerror(errno)))")
-    }
-}
-
 public final class StreamMuxWire: NSObject, MuxWire, StreamDelegate {
     private let input: InputStream
     private let output: OutputStream
@@ -115,6 +105,15 @@ public final class MuxProxy {
         var deadline = ProcessInfo.processInfo.systemUptime + 10
         var lastError: Int32 = 0
         init(fd: Int32, stream: MuxStream) { self.fd = fd; self.stream = stream }
+        func closeSocket() {
+            if fd >= 0 { Darwin.close(fd); fd = -1 }
+            connecting = false
+        }
+        func close() {
+            operation?.cancel()
+            operation = nil
+            closeSocket()
+        }
     }
     private let wire: MuxWire
     private let onFailure: (String) -> Void
@@ -134,30 +133,7 @@ public final class MuxProxy {
         mux = Multiplexer(allowInternet: allowInternet)
         decoder = MuxDecoder(allowInternet: allowInternet)
         resolver.maxConcurrentOperationCount = 2
-        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw PiLinkError.invalid("多重化 listener socket に失敗しました") }
-        var installed = false
-        defer { if !installed { Darwin.close(fd) } }
-        try configureMuxSocket(fd)
-        var enabled: Int32 = 1
-        guard setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enabled, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
-            throw PiLinkError.invalid("多重化 SO_REUSEADDR に失敗しました")
-        }
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = port.bigEndian
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        let bound = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bound == 0, Darwin.listen(fd, Int32(Multiplexer.streamLimit)) == 0 else {
-            throw PiLinkError.invalid("127.0.0.1:\(port) の listen: \(String(cString: strerror(errno)))")
-        }
-        listener = fd
-        installed = true
+        listener = try openLoopbackListener(port: port, backlog: Int32(Multiplexer.streamLimit))
     }
 
     public func start() {
@@ -172,10 +148,7 @@ public final class MuxProxy {
         timer = nil
         if listener >= 0 { Darwin.close(listener); listener = -1 }
         resolver.cancelAllOperations()
-        for state in sockets.values {
-            state.operation?.cancel()
-            if state.fd >= 0 { Darwin.close(state.fd) }
-        }
+        for state in sockets.values { state.close() }
         sockets.removeAll()
         wire.close()
     }
@@ -207,18 +180,13 @@ public final class MuxProxy {
     }
 
     private func connectNext(_ state: SocketState) {
-        if state.fd >= 0 { Darwin.close(state.fd); state.fd = -1 }
-        state.connecting = false
+        state.closeSocket()
         while !state.addresses.isEmpty {
             let address = state.addresses.removeFirst()
             let fd = Darwin.socket(address.family, SOCK_STREAM, 0)
             if fd < 0 { state.lastError = errno; continue }
-            do { try configureMuxSocket(fd) }
+            do { try configureTCPSocket(fd) }
             catch { state.lastError = errno; Darwin.close(fd); continue }
-            var enabled: Int32 = 1
-            if setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, socklen_t(MemoryLayout<Int32>.size)) < 0 {
-                state.lastError = errno; Darwin.close(fd); continue
-            }
             let result = address.address.withUnsafeBytes {
                 Darwin.connect(fd, $0.baseAddress!.assumingMemoryBound(to: sockaddr.self), socklen_t($0.count))
             }
@@ -250,11 +218,7 @@ public final class MuxProxy {
                 continue
             }
             do {
-                try configureMuxSocket(fd)
-                var enabled: Int32 = 1
-                guard setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
-                    throw PiLinkError.invalid("TCP_NODELAY に失敗しました")
-                }
+                try configureTCPSocket(fd)
                 let stream = try mux.open()
                 sockets[stream.id] = SocketState(fd: fd, stream: stream)
                 print("多重化 SSH 接続: stream=\(stream.id)")
@@ -342,10 +306,7 @@ public final class MuxProxy {
 
     private func retireSockets() {
         for id in mux.takeRetired() {
-            if let state = sockets.removeValue(forKey: id) {
-                state.operation?.cancel()
-                if state.fd >= 0 { Darwin.close(state.fd) }
-            }
+            sockets.removeValue(forKey: id)?.close()
             print("多重化 SSH 終了: stream=\(id)")
         }
     }

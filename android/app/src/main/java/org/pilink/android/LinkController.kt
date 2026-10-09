@@ -76,7 +76,7 @@ class LinkController(
                 addressSelected(selectedAddress)
                 ready = true
                 try {
-                    if (multiplex || internet) openMultiplexChannel()
+                    if (multiplex) openMultiplexChannel()
                     else {
                         if (listener == null) startListener()
                         updateBlePriority()

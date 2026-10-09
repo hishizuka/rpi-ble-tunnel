@@ -341,15 +341,7 @@ class MainActivity : AppCompatActivity() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), dp(12))
         }
-        val box = TextInputLayout(this).apply {
-            hint = getString(R.string.hostname); boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-        }
-        val hostname = TextInputEditText(box.context).apply {
-            setSingleLine(); setText(existing?.hostname.orEmpty())
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        }
-        box.addView(hostname, LinearLayout.LayoutParams(-1, -2))
-        form.addView(box, LinearLayout.LayoutParams(-1, -2))
+        val hostname = addTextField(form, R.string.hostname, existing?.hostname.orEmpty())
         form.addView(TextView(this).apply {
             setText(R.string.hostname_search_help); setTextColor(color(R.color.pilink_muted))
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
@@ -361,9 +353,10 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnDismissListener { if (registrationDialog === dialog) registrationDialog = null }
         dialog.show()
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-            val name = DeviceProfile.normalizeHostname(hostname.text.toString())
+            val name = DeviceProfile.normalizeHostname(hostname.editText!!.text.toString())
             if (!DeviceProfile.validHostname(name)) {
-                box.error = getString(R.string.hostname_validation_error); return@setOnClickListener
+                hostname.error = getString(R.string.hostname_validation_error)
+                return@setOnClickListener
             }
             dialog.dismiss(); registerDevice(existing, name)
         }
@@ -376,6 +369,19 @@ class MainActivity : AppCompatActivity() {
         try { startActivity(launch) } catch (_: ActivityNotFoundException) { toast(R.string.termius_missing) }
     }
 
+    private fun addTextField(form: LinearLayout, label: Int, initial: String, bottomMargin: Int = 0): TextInputLayout {
+        val box = TextInputLayout(this).apply {
+            hint = getString(label); boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        }
+        val input = TextInputEditText(box.context).apply {
+            setSingleLine(); setText(initial)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        box.addView(input, LinearLayout.LayoutParams(-1, -2))
+        form.addView(box, LinearLayout.LayoutParams(-1, -2).apply { this.bottomMargin = dp(bottomMargin) })
+        return box
+    }
+
     private fun editDevice(existing: DeviceProfile) {
         if (state.running) { toast(R.string.editing_while_connected); return }
         if (existing.address == null) { searchByHostname(existing); return }
@@ -384,20 +390,8 @@ class MainActivity : AppCompatActivity() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), 0)
         }
-        fun field(label: Int, initial: String): TextInputEditText {
-            val box = TextInputLayout(this).apply {
-                hint = getString(label); boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            }
-            val input = TextInputEditText(box.context).apply {
-                setSingleLine(); setText(initial)
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            }
-            box.addView(input, LinearLayout.LayoutParams(-1, -2))
-            form.addView(box, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
-            return input
-        }
-        val displayName = field(R.string.display_name, existing.displayName)
-        val hostname = field(R.string.hostname, existing.hostname)
+        val displayName = addTextField(form, R.string.display_name, existing.displayName, bottomMargin = 12)
+        val hostname = addTextField(form, R.string.hostname, existing.hostname, bottomMargin = 12)
         form.addView(TextView(this).apply {
             text = getString(R.string.discovered_address, existing.address); setTextColor(color(R.color.pilink_muted))
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
@@ -416,8 +410,8 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnShowListener {
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 if (state.running) { dialog.dismiss(); toast(R.string.editing_while_connected); return@setOnClickListener }
-                val name = DeviceProfile.normalizeHostname(hostname.text.toString())
-                val profile = existing.copy(hostname = name, displayName = displayName.text.toString().trim())
+                val name = DeviceProfile.normalizeHostname(hostname.editText!!.text.toString())
+                val profile = existing.copy(hostname = name, displayName = displayName.editText!!.text.toString().trim())
                 if (runCatching { profile.validated() }.isFailure) { toast(R.string.device_validation_error); return@setOnClickListener }
                 if (store.devices.any { it.id != profile.id && it.address == profile.address }) {
                     toast(R.string.duplicate_device); return@setOnClickListener
@@ -442,7 +436,7 @@ class MainActivity : AppCompatActivity() {
         debugCapability = null; debugProfile = null
         startForegroundService(Intent(this, PiLinkService::class.java).setAction(PiLinkService.START)
             .putExtra("name", profile.hostname).putExtra("port", profile.port)
-            .putExtra("host_key_alias", "${profile.hostname}.local").putExtra("capability", capability)
+            .putExtra("capability", capability)
             .putExtra("address", profile.address).putExtra("legacy_name", profile.legacyBluetoothName)
             .putExtra("display_name", profile.displayName))
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)

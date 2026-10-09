@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -116,6 +117,28 @@ class SupervisionTests(unittest.TestCase):
             self.assertGreater(instance.events.wait.call_args.args[0], 0)
             self.assertLessEqual(instance.events.wait.call_args.args[0], 5)
             self.assertEqual(instance.session["session"], "abc")
+
+
+class ProcessStopTests(unittest.TestCase):
+    def test_running_process_is_stopped_and_reaped(self):
+        with subprocess.Popen([sys.executable, "-c", "import signal; print('ready', flush=True); signal.pause()"],
+                              stdout=subprocess.PIPE) as process:
+            self.assertEqual(process.stdout.readline(), b"ready\n")
+            network.stop_process(process)
+            self.assertEqual(process.returncode, -signal.SIGTERM)
+
+    def test_unresponsive_process_is_killed_and_reaped(self):
+        code = "import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); signal.pause()"
+        with subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE) as process:
+            self.assertEqual(process.stdout.readline(), b"ready\n")
+            network.stop_process(process)
+            self.assertEqual(process.returncode, -signal.SIGKILL)
+
+    def test_already_exited_process_keeps_its_exit_status(self):
+        with subprocess.Popen([sys.executable, "-c", "raise SystemExit(7)"]) as process:
+            process.wait(timeout=3)
+            network.stop_process(process)
+            self.assertEqual(process.returncode, 7)
 
 
 @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open"), "Linux notification APIs")

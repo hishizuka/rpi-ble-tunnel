@@ -37,6 +37,16 @@ IN_Q_OVERFLOW = 0x00004000
 IN_IGNORED = 0x00008000
 
 
+def stop_process(process):
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=3)
+
+
 class StopEvent(threading.Event):
     def __init__(self):
         super().__init__()
@@ -101,7 +111,7 @@ class NetworkEvents:
     def wake(self):
         try:
             self.sender.send(b"\0")
-        except (BlockingIOError, OSError):
+        except OSError:
             pass
 
     def unwatch_process(self, tag):
@@ -144,13 +154,7 @@ class NetworkEvents:
             except KeyError:
                 pass
             self.monitor.stdout.close()
-            if self.monitor.poll() is None:
-                self.monitor.terminate()
-            try:
-                self.monitor.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                self.monitor.kill()
-                self.monitor.wait(timeout=3)
+            stop_process(self.monitor)
             self.monitor = None
 
     def file_events(self):
@@ -340,13 +344,7 @@ class Network:
             error = exception
         finally:
             if self.engine is not None:
-                if self.engine.poll() is None:
-                    self.engine.terminate()
-                    try:
-                        self.engine.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        self.engine.kill()
-                        self.engine.wait(timeout=3)
+                stop_process(self.engine)
                 self.engine = None
             # NM creates a persistent TUN. Removing the profile alone can leave the device behind.
             ownership = self.runtime / "owned.json"
@@ -517,13 +515,7 @@ def main():
                 network.serve(daemon)
         finally:
             if daemon is not None:
-                if daemon.poll() is None:
-                    daemon.terminate()
-                    try:
-                        daemon.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        daemon.kill()
-                        daemon.wait(timeout=3)
+                stop_process(daemon)
 
 
 if __name__ == "__main__":

@@ -39,11 +39,13 @@ class MuxBridge(
     private val active: (Boolean) -> Unit = {},
     private val connections: (Int) -> Unit = {},
     private val allowInternet: Boolean = false,
-    private val resolve: (MuxDestination) -> List<InetAddress> = { InetAddress.getAllByName(it.host).take(8) },
+    private val resolve: (MuxDestination) -> List<InetAddress> = { InetAddress.getAllByName(it.host).toList() },
     private val connectTimeoutMillis: Long = 10000,
     private var powerSaving: Boolean = false
 ) : Closeable {
-    private class Endpoint(val stream: MuxStream, var channel: SocketChannel? = null, var key: SelectionKey? = null) {
+    private class Endpoint(val stream: MuxStream) : Closeable {
+        var channel: SocketChannel? = null
+        var key: SelectionKey? = null
         var shutdown = false
         var connecting = false
         var resolved = false
@@ -51,6 +53,29 @@ class MuxBridge(
         var job: Future<*>? = null
         var deadline = 0L
         var lastReason = 1L
+        val pendingConnect: Boolean get() = stream.destination != null && !stream.acknowledged && stream.reset == null
+
+        fun attach(channel: SocketChannel, selector: Selector, connecting: Boolean = false) {
+            val key = channel.register(selector, if (connecting) SelectionKey.OP_CONNECT else 0)
+            key.attach(this)
+            this.channel = channel
+            this.key = key
+            this.connecting = connecting
+        }
+
+        fun closeChannel() {
+            key?.cancel()
+            runCatching { channel?.close() }
+            key = null
+            channel = null
+            connecting = false
+        }
+
+        override fun close() {
+            job?.cancel(true)
+            job = null
+            closeChannel()
+        }
     }
     private val lock = ReentrantLock()
     private val changed = lock.newCondition()
@@ -75,9 +100,8 @@ class MuxBridge(
 
     private fun selectTimeoutMillis(): Long = lock.withLock {
         if (!powerSaving) return@withLock 100L
-        val deadline = endpoints.values.filter {
-            it.stream.destination != null && !it.stream.acknowledged && it.stream.reset == null
-        }.minOfOrNull { it.deadline } ?: return@withLock 0L
+        val deadline = endpoints.values.asSequence().filter { it.pendingConnect }
+            .minOfOrNull { it.deadline } ?: return@withLock 0L
         // Zero means an event-only wait; pending DNS/TCP connects retain their deadlines.
         (TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()) + 1).coerceAtLeast(1)
     }
@@ -143,7 +167,7 @@ class MuxBridge(
                         retire()
                         if (ready.any { it.isValid && it.channel() === listener && it.isAcceptable }) accept()
                         for (endpoint in endpoints.values.toList()) {
-                            if (endpoint.stream.destination != null && !endpoint.stream.acknowledged && endpoint.stream.reset == null) {
+                            if (endpoint.pendingConnect) {
                                 if (System.nanoTime() > endpoint.deadline) {
                                     endpoint.job?.cancel(true)
                                     core.cancel(endpoint.stream, 6)
@@ -185,9 +209,8 @@ class MuxBridge(
                 channel.configureBlocking(false)
                 channel.socket().tcpNoDelay = true
                 val stream = core.open()
-                val key = channel.register(selector, 0)
-                val endpoint = Endpoint(stream, channel, key)
-                key.attach(endpoint)
+                val endpoint = Endpoint(stream)
+                endpoint.attach(channel, selector)
                 endpoints[stream.id] = endpoint
                 signal()
             } catch (error: Exception) { channel.close(); throw error }
@@ -225,11 +248,7 @@ class MuxBridge(
     }
 
     private fun connectNext(endpoint: Endpoint) {
-        endpoint.key?.cancel()
-        runCatching { endpoint.channel?.close() }
-        endpoint.key = null
-        endpoint.channel = null
-        endpoint.connecting = false
+        endpoint.closeChannel()
         while (endpoint.addresses.isNotEmpty()) {
             val address = endpoint.addresses.removeFirst()
             var channel: SocketChannel? = null
@@ -238,11 +257,7 @@ class MuxBridge(
                 channel.configureBlocking(false)
                 channel.socket().tcpNoDelay = true
                 val connected = channel.connect(InetSocketAddress(address, endpoint.stream.destination!!.port))
-                val key = channel.register(selector, if (connected) 0 else SelectionKey.OP_CONNECT)
-                endpoint.channel = channel
-                endpoint.key = key
-                key.attach(endpoint)
-                endpoint.connecting = !connected
+                endpoint.attach(channel, selector, connecting = !connected)
                 if (connected) core.connected(endpoint.stream)
                 signal()
                 return
@@ -302,11 +317,7 @@ class MuxBridge(
     }
 
     private fun retire() {
-        for (id in core.takeRetired()) endpoints.remove(id)?.let {
-            it.job?.cancel(true)
-            it.key?.cancel()
-            runCatching { it.channel?.close() }
-        }
+        for (id in core.takeRetired()) endpoints.remove(id)?.close()
         MuxResolver.executor.purge()
         notifyActivity()
     }
@@ -323,10 +334,7 @@ class MuxBridge(
     private fun closeOnce(): Boolean {
         if (!closed.compareAndSet(false, true)) return false
         lock.withLock {
-            endpoints.values.forEach {
-                it.job?.cancel(true)
-                runCatching { it.channel?.close() }
-            }
+            endpoints.values.forEach { it.close() }
             MuxResolver.executor.purge()
             endpoints.clear()
             runCatching { listener.close() }

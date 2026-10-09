@@ -89,7 +89,7 @@ public final class MuxStream {
     fileprivate var reset: UInt32?
     fileprivate var connected = false
     public var readAllowance: Int {
-        acknowledged && !localEOF && reset == nil ? max(0, credit - outgoing.count) : 0
+        acknowledged && !localEOF && reset == nil ? credit - outgoing.count : 0
     }
     fileprivate init(id: UInt32) { self.id = id }
 }
@@ -239,9 +239,6 @@ public final class Multiplexer {
             if let reason = stream.reset {
                 frame = MuxFrame(.reset, id: stream.id, value: reason)
                 retire(stream)
-            } else if !stream.openSent {
-                stream.openSent = true
-                frame = MuxFrame(.open, id: stream.id, value: UInt32(Self.windowSize))
             } else if stream.destination != nil && stream.connected && !stream.acknowledged {
                 stream.acknowledged = true
                 stream.receiveCredit = Self.windowSize
