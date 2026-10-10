@@ -89,10 +89,10 @@ def main():
     binary = None
     if args.client == "macos":
         binary = Path(subprocess.check_output(["swift", "build", "--package-path", str(ROOT / "macos"),
-                                              "--show-bin-path"], text=True).strip()) / "pilink-mux-test"
+                                              "--show-bin-path"], text=True).strip()) / "rpi-ble-tunnel-mux-test"
     processes = []
     handles = []
-    with tempfile.TemporaryDirectory(prefix="pilink-internet-") as temp:
+    with tempfile.TemporaryDirectory(prefix="rpi-ble-tunnel-internet-") as temp:
         directory = Path(temp)
         try:
             def start(command, filename, marker):
@@ -108,7 +108,7 @@ def main():
             if args.client == "android":
                 java_home = Path(os.environ.get("JAVA_HOME", "/Applications/Android Studio.app/Contents/jbr/Contents/Home"))
                 classpath = (ROOT / "build/android-mux-classpath.txt").read_text().strip()
-                command = [str(java_home / "bin/java"), "-cp", classpath, "org.pilink.android.MuxTransportMain", str(wire), str(ssh), "internet"]
+                command = [str(java_home / "bin/java"), "-cp", classpath, "org.rpibletunnel.android.MuxTransportMain", str(wire), str(ssh), "internet"]
             else:
                 command = [str(binary), str(wire), str(ssh), "internet"]
             proxy = start(command, "proxy.log", "READY")
@@ -133,7 +133,7 @@ def main():
                          (b"\x05\x01\x01\x01", 1), (b"\x05\x01\x00\x03\x00", 8),
                          (b"\x05\x01\x00\x03\x01\x00\x00\x16", 8),
                          (request(checks.free_port()), 5),
-                         (request(443, "pilink-test.invalid", 3), 4),
+                         (request(443, "rpi-ble-tunnel-test.invalid", 3), 4),
                          (request(443, "x" * 255, 3), 4)]
                 for command, reason in cases:
                     with socket.create_connection(("127.0.0.1", socks), timeout=20) as sock:

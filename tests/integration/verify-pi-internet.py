@@ -73,7 +73,7 @@ def parallel():
     return dict(bytes=[len(page) for page in pages])
 record('two_parallel_https_requests_while_ble_ssh_held', parallel)
 
-with tempfile.TemporaryDirectory(prefix='pilink-internet-test-') as temp:
+with tempfile.TemporaryDirectory(prefix='rpi-ble-tunnel-internet-test-') as temp:
     root=pathlib.Path(temp)
     def clone():
         path=root/'git'
@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='pilink-internet-test-') as temp:
 
 def dns_error():
     result=subprocess.run(['curl','--noproxy','','--silent','--show-error','--max-time','30',
-                           'https://pilink-test.invalid/'],env=environment,capture_output=True,timeout=40)
+                           'https://rpi-ble-tunnel-test.invalid/'],env=environment,capture_output=True,timeout=40)
     assert result.returncode!=0 and not result.stdout
     assert b'Example Domain' in fetch('https://example.com/')
     return dict(curl_exit_code=result.returncode)

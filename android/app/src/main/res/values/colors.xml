@@ -1,10 +1,10 @@
 <resources>
-    <color name="pilink_background">#0C1B23</color>
-    <color name="pilink_surface">#132630</color>
-    <color name="pilink_selected">#1C353B</color>
-    <color name="pilink_primary">#98F5CF</color>
-    <color name="pilink_on_primary">#07382A</color>
-    <color name="pilink_on_surface">#F0F5F7</color>
-    <color name="pilink_muted">#B2C3CC</color>
-    <color name="pilink_outline">#354E59</color>
+    <color name="rpi_ble_tunnel_background">#0C1B23</color>
+    <color name="rpi_ble_tunnel_surface">#132630</color>
+    <color name="rpi_ble_tunnel_selected">#1C353B</color>
+    <color name="rpi_ble_tunnel_primary">#98F5CF</color>
+    <color name="rpi_ble_tunnel_on_primary">#07382A</color>
+    <color name="rpi_ble_tunnel_on_surface">#F0F5F7</color>
+    <color name="rpi_ble_tunnel_muted">#B2C3CC</color>
+    <color name="rpi_ble_tunnel_outline">#354E59</color>
 </resources>

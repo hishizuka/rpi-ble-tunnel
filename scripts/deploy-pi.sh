@@ -26,4 +26,4 @@ scp "${task_ssh_options[@]}" "$task_root/scripts/install-pi-network.sh" \
     "$task_target:rpi-ble-tunnel/scripts/"
 ssh "${task_ssh_options[@]}" "$task_target" 'set -eu
 bash ~/rpi-ble-tunnel/scripts/install-pi-network.sh
-sudo -n systemctl --no-pager --full status pilinkd.service'
+sudo -n systemctl --no-pager --full status rpi-ble-tunneld.service'

@@ -1,12 +1,12 @@
-# PiLink — Network tunnel over BLE
+# rpi-ble-tunnel — Network tunnel over BLE
 
 English (primary) | [日本語](README.ja.md)
 
-PiLink is a library that provides a TCP tunnel over BLE. You can SSH into a Raspberry Pi from an Android phone or Mac, and the Pi can access the Internet through that device's connection.
+rpi-ble-tunnel is a library that provides a TCP tunnel over BLE. You can SSH into a Raspberry Pi from an Android phone or Mac, and the Pi can access the Internet through that device's connection.
 
 The Pi and client do not need to share a Wi-Fi network.
 
-<img src="docs/assets/pilink-overview.svg" alt="PiLink connects a Raspberry Pi to an Android phone or Mac over one BLE link, relaying SSH to the Pi and outbound TCP through the client's Internet connection. No shared Wi-Fi network required." width="1280">
+<img src="docs/assets/rpi-ble-tunnel-overview.svg" alt="rpi-ble-tunnel connects a Raspberry Pi to an Android phone or Mac over one BLE link, relaying SSH to the Pi and outbound TCP through the client's Internet connection. No shared Wi-Fi network required." width="1280">
 
 - Connect to the Pi's OpenSSH server from an Android or Mac SSH client. SCP, SFTP, and rsync also work.
 - TCP applications on the Pi can use the Android or Mac Internet connection without configuring a proxy for each application.
@@ -44,7 +44,7 @@ bash scripts/install-pi-network.sh
 
 If sudo authorization expires during a long first build, run `sudo -v` and repeat the command; completed builds are reused. You can also run `sudo bash scripts/install-pi-network.sh` to build and install as root.
 
-The installer installs dependencies, builds and tests the software, installs the service, starts `pilinkd.service`, and enables it at boot. Use the same procedure for updates. Updates disconnect BLE, so run them through a separate LAN / USB SSH management connection. See [update and recovery details](docs/operations.md#updates-and-the-installer).
+The installer installs dependencies, builds and tests the software, installs the service, starts `rpi-ble-tunneld.service`, and enables it at boot. Use the same procedure for updates. Updates disconnect BLE, so run them through a separate LAN / USB SSH management connection. See [update and recovery details](docs/operations.md#updates-and-the-installer).
 
 You can also transfer the source and install from a Mac. This requires SSH public-key authentication over the management connection, a trusted host key, and passwordless sudo on the Pi. Run on the Mac.
 
@@ -63,7 +63,7 @@ Set `JAVA_HOME` for the JDK, specify the SDK with `ANDROID_HOME` or `android/loc
 ./scripts/deploy-android.sh ADB_SERIAL
 ```
 
-The APK is saved to `build/pilink-android-debug.apk`. You can omit `ADB_SERIAL` when only one device is connected.
+The APK is saved to `build/rpi-ble-tunnel-android-debug.apk`. You can omit `ADB_SERIAL` when only one device is connected.
 
 ### Mac
 
@@ -73,13 +73,13 @@ Run on the Mac you will use as the client. If Xcode / Command Line Tools is not 
 ./scripts/build-macos.sh
 ```
 
-The client is saved to `build/PiLink.app`.
+The client is saved to `build/rpi-ble-tunnel.app`.
 
 ## Usage
 
 ### Connect from Android
 
-1. Open **Add a Pi** in PiLink settings, allow access to nearby devices, select a Pi from the search results, and save a display name. Choose **Enter hostname** to search by hostname alone; the Bluetooth address is read automatically from the selected device. Android 10 / 11 requires location permission and location services to be enabled.
+1. Open **Add a Pi** in rpi-ble-tunnel settings, allow access to nearby devices, select a Pi from the search results, and save a display name. Choose **Enter hostname** to search by hostname alone; the Bluetooth address is read automatically from the selected device. Android 10 / 11 requires location permission and location services to be enabled.
 2. Select the Pi on the connection screen, tap **Connect**, and allow notifications when prompted.
 3. Use **Open in Termius** or **Copy command** to start SSH after connecting. Store SSH credentials in your chosen SSH client.
 
@@ -117,7 +117,7 @@ An unexpected disconnect exits the Mac client. Run `start HOSTNAME` again to rec
 
 ### Access the Internet from the Pi
 
-After connecting with PiLink on Android or Mac, run ordinary TCP applications on the Pi. No per-application SOCKS configuration is required.
+After connecting with rpi-ble-tunnel on Android or Mac, run ordinary TCP applications on the Pi. No per-application SOCKS configuration is required.
 
 ```bash
 curl --noproxy '*' https://example.com/
@@ -130,7 +130,7 @@ A `tun0` interface and temporary routes and DNS settings are created while conne
 - Each Pi accepts one Android or Mac BLE connection at a time.
 - SSH and outbound TCP share a limit of eight connections, with at most seven outbound TCP connections. New requests wait when busy and fail if queue or timeout limits are exceeded.
 - General UDP, QUIC, NTP, and ICMP traffic is unsupported. Mapped DNS returns synthetic addresses for A records; actual AAAA, MX, TXT, and similar record lookups are unsupported.
-- PiLink uses a different mechanism from Bluetooth PAN tethering. Large transfers and many parallel downloads are constrained.
+- rpi-ble-tunnel uses a different mechanism from Bluetooth PAN tethering. Large transfers and many parallel downloads are constrained.
 - BLE pairing and link encryption are not required. OpenSSH provides SSH authentication and encryption; applications provide HTTPS encryption.
 
 ## Further documentation
@@ -144,4 +144,4 @@ A `tun0` interface and temporary routes and DNS settings are created while conne
 
 ## License
 
-PiLink is licensed under the [MIT License](LICENSE). Third-party code and assets retain their own licenses; see [third-party notices](docs/third-party-notices.md).
+rpi-ble-tunnel is licensed under the [MIT License](LICENSE). Third-party code and assets retain their own licenses; see [third-party notices](docs/third-party-notices.md).

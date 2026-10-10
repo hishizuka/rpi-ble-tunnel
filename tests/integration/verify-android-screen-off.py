@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify Android PiLink through adb forwarding while the display is asleep."""
+"""Verify Android rpi-ble-tunnel through adb forwarding while the display is asleep."""
 
 import argparse
 import concurrent.futures
@@ -29,7 +29,7 @@ def main():
         state = re.search(r"mWakefulness=(\w+)", data)
         locks = data.split("Wake Locks: size=", 1)[-1].split("Suspend Blockers:", 1)[0]
         return {"wakefulness": state.group(1) if state else None,
-                "pilink_wake_lock_held": "'PiLink:SSH'" in locks}
+                "rpi_ble_tunnel_wake_lock_held": "'rpi-ble-tunnel:SSH'" in locks}
 
     ssh = ["ssh", "-o", "BatchMode=yes", "-o", "HostKeyAlias=" + args.host_key_alias,
            "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=60",
@@ -53,21 +53,21 @@ def main():
                 break
             assert time.monotonic() < deadline, "Display did not enter sleep"
             time.sleep(0.2)
-        assert asleep["pilink_wake_lock_held"], "Active SSH has no partial wake lock"
+        assert asleep["rpi_ble_tunnel_wake_lock_held"], "Active SSH has no partial wake lock"
         started = time.monotonic()
         second = subprocess.run(ssh + ["sleep 12; printf SECOND_SCREEN_OK"],
                                 capture_output=True, check=True, timeout=90)
         assert second.stdout == b"SECOND_SCREEN_OK"
         still_asleep = power()
         assert still_asleep["wakefulness"] in ("Asleep", "Dozing")
-        assert still_asleep["pilink_wake_lock_held"]
+        assert still_asleep["rpi_ble_tunnel_wake_lock_held"]
         output, error = console.communicate(input=b"release\n", timeout=30)
         assert console.returncode == 0 and output == b"SCREEN_OK", error.decode(errors="replace")
         elapsed = time.monotonic() - started
         deadline = time.monotonic() + 10
         while True:
             idle = power()
-            if not idle["pilink_wake_lock_held"]:
+            if not idle["rpi_ble_tunnel_wake_lock_held"]:
                 break
             assert time.monotonic() < deadline, "Wake lock remained after all SSH streams ended"
             time.sleep(0.2)

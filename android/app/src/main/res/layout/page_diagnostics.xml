@@ -5,16 +5,16 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="vertical" android:padding="24dp">
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/connection_details" android:textAppearance="@style/PiLink.Title" />
+            android:text="@string/connection_details" android:textAppearance="@style/RpiBleTunnel.Title" />
         <TextView android:id="@+id/diagnostic_status" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:textAppearance="@style/PiLink.Body" />
+            android:layout_marginTop="8dp" android:textAppearance="@style/RpiBleTunnel.Body" />
         <TextView android:id="@+id/ssh_endpoint" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="24dp" android:textAppearance="@style/PiLink.Body" android:textIsSelectable="true" />
+            android:layout_marginTop="24dp" android:textAppearance="@style/RpiBleTunnel.Body" android:textIsSelectable="true" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp"
-            android:text="@string/diagnostic_log" android:textAppearance="@style/PiLink.Title" />
+            android:text="@string/diagnostic_log" android:textAppearance="@style/RpiBleTunnel.Title" />
         <TextView android:id="@+id/diagnostic_log" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp" android:fontFamily="monospace" android:textSize="12sp"
-            android:textColor="@color/pilink_muted" android:textIsSelectable="true" android:text="@string/no_log" />
+            android:textColor="@color/rpi_ble_tunnel_muted" android:textIsSelectable="true" android:text="@string/no_log" />
         <com.google.android.material.button.MaterialButton android:id="@+id/copy_log"
             style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="@string/copy_log" />

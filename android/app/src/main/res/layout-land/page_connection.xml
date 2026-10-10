@@ -8,7 +8,7 @@
         <LinearLayout android:id="@+id/connection_content" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:padding="16dp">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="@string/registered_devices" android:textAppearance="@style/PiLink.Title"
+                android:text="@string/registered_devices" android:textAppearance="@style/RpiBleTunnel.Title"
                 android:layout_marginBottom="12dp" />
             <LinearLayout android:id="@+id/device_list" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:orientation="vertical" />
@@ -19,7 +19,7 @@
                 android:orientation="vertical" android:paddingTop="16dp">
                 <TextView android:id="@+id/connection_status" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:text="@string/disconnected" android:textSize="16sp" android:textStyle="bold"
-                    android:textColor="@color/pilink_on_surface" android:accessibilityLiveRegion="polite" />
+                    android:textColor="@color/rpi_ble_tunnel_on_surface" android:accessibilityLiveRegion="polite" />
                 <TextView android:id="@+id/selected_device" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:visibility="gone" />
             </LinearLayout>

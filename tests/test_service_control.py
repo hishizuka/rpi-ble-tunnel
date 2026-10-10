@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "service_control",
-    Path(__file__).resolve().parents[1] / "pi/pilink-service-control.py",
+    Path(__file__).resolve().parents[1] / "pi/rpi-ble-tunnel-service-control.py",
 )
 control = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(control)
@@ -115,7 +115,7 @@ class ServiceControlTest(unittest.TestCase):
                 control.control("apply", "hci3")
                 self.assertEqual(
                     path.read_text(),
-                    "PILINK_ADAPTER=hci3\nPILINK_ADAPTER_ADDRESS=AA:BB:CC:DD:EE:FF\n",
+                    "RPI_BLE_TUNNEL_ADAPTER=hci3\nRPI_BLE_TUNNEL_ADAPTER_ADDRESS=AA:BB:CC:DD:EE:FF\n",
                 )
                 commands = [call.args for call in run.call_args_list]
                 self.assertIn(("systemctl", "start", control.UNIT), commands)

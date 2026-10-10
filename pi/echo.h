@@ -1,5 +1,5 @@
-#ifndef PILINK_ECHO_H
-#define PILINK_ECHO_H
+#ifndef RPI_BLE_TUNNEL_ECHO_H
+#define RPI_BLE_TUNNEL_ECHO_H
 
 #include <stddef.h>
 #include <stdint.h>

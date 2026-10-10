@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PiLink</string>
+    <string name="app_name">rpi-ble-tunnel</string>
     <string name="connection_tab">接続</string>
     <string name="diagnostics_tab">診断</string>
     <string name="settings_title">設定</string>
@@ -50,7 +50,7 @@
     <string name="discovered_address">Bluetoothアドレス\n%1$s</string>
     <string name="choose_pi">登録するPiを選んでください。</string>
     <string name="pi_not_found">Piが見つかりませんでした。電源とBluetoothを確認してください。</string>
-    <string name="pi_update_required">このPiのホスト名を読み取るには、Pi側のPiLinkを更新してください。</string>
+    <string name="pi_update_required">このPiのホスト名を読み取るには、Pi側のrpi-ble-tunnelを更新してください。</string>
     <string name="pi_scan_failed">Piの検索を開始できませんでした。</string>
     <string name="bluetooth_off">BluetoothをONにしてください。</string>
     <string name="edit_named_device">%1$s · 編集\n%2$s</string>
@@ -73,11 +73,11 @@
     <string name="diagnostic_log">診断ログ</string>
     <string name="no_log">接続すると、ここに診断ログが表示されます。</string>
     <string name="copy_log">ログをコピー</string>
-    <string name="app_version">PiLink %1$s</string>
+    <string name="app_version">rpi-ble-tunnel %1$s</string>
     <string name="open_source_licenses">オープンソースライセンス</string>
     <string name="licenses_title">Material Design Icons</string>
     <string name="done">閉じる</string>
-    <string name="notification_channel">PiLink 接続</string>
+    <string name="notification_channel">rpi-ble-tunnel 接続</string>
     <string name="stop">停止</string>
     <string name="stopped">停止中</string>
     <string name="invalid_connection_settings">接続設定が不正です</string>

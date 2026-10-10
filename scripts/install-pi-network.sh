@@ -1,14 +1,14 @@
 #!/bin/bash
-# Install PiLink and its dependencies on Raspberry Pi OS.
+# Install rpi-ble-tunnel and its dependencies on Raspberry Pi OS.
 set -Eeuo pipefail
 task_script=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")
 task_root=$(CDPATH= cd -- "$(dirname -- "$task_script")/.." && pwd)
 
 usage() {
     printf 'Usage: bash %s [--skip-deps] [--caller-managed]\n' "$task_script"
-    printf 'Install dependencies, build and test, then enable pilinkd.service.\n'
+    printf 'Install dependencies, build and test, then enable rpi-ble-tunneld.service.\n'
     printf '  --skip-deps  Use dependencies already installed by the caller.\n'
-    printf '  --caller-managed  Let the caller select the BLE adapter and start PiLink.\n'
+    printf '  --caller-managed  Let the caller select the BLE adapter and start rpi-ble-tunnel.\n'
 }
 if [[ $# == 1 && ( "$1" == --help || "$1" == -h ) ]]; then usage; exit 0; fi
 task_skip_deps=false
@@ -26,7 +26,7 @@ if [[ $(uname -s) != Linux || ! -d /run/systemd/system ]]; then
     exit 2
 fi
 export PATH="${PATH:-/usr/bin:/bin}:/usr/sbin:/sbin"
-if [[ -f /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf ]]; then
+if [[ -f /etc/systemd/system/rpi-ble-tunneld.service.d/20-caller-adapter.conf ]]; then
     task_caller_managed=true
 fi
 
@@ -41,13 +41,13 @@ if [[ $# == 0 ]]; then
     fi
     test -f "$task_root/CMakeLists.txt"
     test -f "$task_root/LICENSE"
-    test -f "$task_root/pi/pilinkd.service"
+    test -f "$task_root/pi/rpi-ble-tunneld.service"
     test -d "$task_root/tests"
     task_cache="$task_root/build/pi-install"
     mkdir -p "$task_cache"
     # Keep the lock in the parent while the same script installs as root.
     exec 9>"$task_cache/install.lock"
-    flock -n 9 || { printf 'Another PiLink installer is running for this checkout.\n' >&2; exit 2; }
+    flock -n 9 || { printf 'Another rpi-ble-tunnel installer is running for this checkout.\n' >&2; exit 2; }
 
     if [[ "$task_skip_deps" == false ]]; then
         printf 'Installing build and runtime dependencies...\n'
@@ -81,13 +81,13 @@ if [[ $# == 0 ]]; then
     # Re-extract the verified source before each incremental native build.
     tar -xJf "$task_archive" -C "$task_cache" --no-same-owner
     task_hev="$task_cache/hev-socks5-tunnel-$task_hev_version/bin/hev-socks5-tunnel"
-    task_build="$task_cache/pilink"
-    printf 'Building and testing PiLink (one compiler job for Pi Zero)...\n'
+    task_build="$task_cache/rpi-ble-tunnel"
+    printf 'Building and testing rpi-ble-tunnel (one compiler job for Pi Zero)...\n'
     cmake -S "$task_root" -B "$task_build" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
     cmake --build "$task_build" --parallel 1
     ctest --test-dir "$task_build" --output-on-failure
-    PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/pilink-network.py"
-    PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/pilink-service-control.py"
+    PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/rpi-ble-tunnel-network.py"
+    PYTHONPYCACHEPREFIX="$task_cache/pycache" /usr/bin/python3 -m py_compile "$task_root/pi/rpi-ble-tunnel-service-control.py"
     /usr/bin/python3 -m unittest discover -s "$task_root/tests" -p 'test_*.py'
     printf 'Building hev-socks5-tunnel...\n'
     make -C "$task_cache/hev-socks5-tunnel-$task_hev_version" -j1
@@ -111,15 +111,15 @@ if [[ $EUID -ne 0 ]]; then
     printf 'Installing prebuilt binaries requires root.\n' >&2
     exit 2
 fi
-exec 8>/run/lock/pilink-install.lock
-flock -n 8 || { printf 'Another PiLink service installation is running.\n' >&2; exit 2; }
-test -x "$task_build/pilinkd"
+exec 8>/run/lock/rpi-ble-tunnel-install.lock
+flock -n 8 || { printf 'Another rpi-ble-tunnel service installation is running.\n' >&2; exit 2; }
+test -x "$task_build/rpi-ble-tunneld"
 test -x "$task_hev"
 command -v nmcli >/dev/null
 test -x /usr/bin/python3
 if [[ ! -c /dev/net/tun ]]; then modprobe tun; fi
 test -c /dev/net/tun
-task_help=$("$task_build/pilinkd" --help)
+task_help=$("$task_build/rpi-ble-tunneld" --help)
 [[ "$task_help" == *--state-file* ]]
 # Prepare only the dependencies required for the BLE and SSH endpoints.
 systemctl start bluetooth.service NetworkManager.service
@@ -128,22 +128,22 @@ if [[ "$task_caller_managed" == false ]]; then
     busctl --system set-property org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered b true
 fi
 systemctl enable --now ssh.service
-task_daemon_active=$(systemctl is-active pilinkd.service || true)
-task_daemon_enabled=$(systemctl is-enabled pilinkd.service 2>/dev/null || true)
-task_network_enabled=$(systemctl is-enabled pilink-network.service 2>/dev/null || true)
-task_network_active=$(systemctl is-active pilink-network.service 2>/dev/null || true)
+task_daemon_active=$(systemctl is-active rpi-ble-tunneld.service || true)
+task_daemon_enabled=$(systemctl is-enabled rpi-ble-tunneld.service 2>/dev/null || true)
+task_network_enabled=$(systemctl is-enabled rpi-ble-tunnel-network.service 2>/dev/null || true)
+task_network_active=$(systemctl is-active rpi-ble-tunnel-network.service 2>/dev/null || true)
 install -d -m 755 /var/backups
-task_backup=$(mktemp -d /var/backups/pilink-0.1.0-XXXXXXXX)
+task_backup=$(mktemp -d /var/backups/rpi-ble-tunnel-0.1.0-XXXXXXXX)
 task_paths=(
-    /usr/local/bin/pilinkd
-    /usr/local/libexec/pilink-network
-    /usr/local/libexec/pilink-service-control
+    /usr/local/bin/rpi-ble-tunneld
+    /usr/local/libexec/rpi-ble-tunnel-network
+    /usr/local/libexec/rpi-ble-tunnel-service-control
     /usr/local/libexec/hev-socks5-tunnel
-    /usr/local/share/doc/pilink/LICENSE
-    /usr/local/share/doc/pilink/hev-socks5-tunnel-LICENSE.txt
-    /etc/systemd/system/pilinkd.service
-    /etc/systemd/system/pilink-network.service
-    /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf
+    /usr/local/share/doc/rpi-ble-tunnel/LICENSE
+    /usr/local/share/doc/rpi-ble-tunnel/hev-socks5-tunnel-LICENSE.txt
+    /etc/systemd/system/rpi-ble-tunneld.service
+    /etc/systemd/system/rpi-ble-tunnel-network.service
+    /etc/systemd/system/rpi-ble-tunneld.service.d/20-caller-adapter.conf
 )
 for task_path in "${task_paths[@]}"; do
     if [[ -e "$task_path" ]]; then cp -a --parents "$task_path" "$task_backup/"; fi
@@ -156,7 +156,7 @@ rollback() {
     trap - ERR INT TERM
     set +e
     printf 'Installation failed; restoring %s\n' "$task_backup" >&2
-    systemctl stop pilink-network.service pilinkd.service 2>/dev/null || true
+    systemctl stop rpi-ble-tunnel-network.service rpi-ble-tunneld.service 2>/dev/null || true
     for task_path in "${task_paths[@]}"; do
         if [[ -e "$task_backup$task_path" ]]; then
             cp -a --remove-destination "$task_backup$task_path" "$task_path"
@@ -166,61 +166,61 @@ rollback() {
     done
     systemctl daemon-reload
     if [[ "$task_daemon_enabled" == enabled ]]; then
-        systemctl enable pilinkd.service
+        systemctl enable rpi-ble-tunneld.service
     else
-        systemctl disable pilinkd.service 2>/dev/null || true
+        systemctl disable rpi-ble-tunneld.service 2>/dev/null || true
     fi
     if [[ "$task_network_enabled" == enabled ]]; then
-        systemctl enable pilink-network.service
+        systemctl enable rpi-ble-tunnel-network.service
     else
-        systemctl disable pilink-network.service 2>/dev/null || true
-        if [[ ! -e /etc/systemd/system/pilink-network.service ]]; then
-            rm -f /etc/systemd/system/multi-user.target.wants/pilink-network.service
+        systemctl disable rpi-ble-tunnel-network.service 2>/dev/null || true
+        if [[ ! -e /etc/systemd/system/rpi-ble-tunnel-network.service ]]; then
+            rm -f /etc/systemd/system/multi-user.target.wants/rpi-ble-tunnel-network.service
         fi
     fi
-    if [[ "$task_daemon_active" == active ]]; then systemctl restart pilinkd.service; fi
-    if [[ "$task_network_active" == active ]]; then systemctl start pilink-network.service; fi
+    if [[ "$task_daemon_active" == active ]]; then systemctl restart rpi-ble-tunneld.service; fi
+    if [[ "$task_network_active" == active ]]; then systemctl start rpi-ble-tunnel-network.service; fi
     exit "$task_exit"
 }
 trap 'rollback "$?"' ERR
 trap 'rollback 130' INT
 trap 'rollback 143' TERM
 # Stop the old split services before replacing their files.
-if [[ "$task_daemon_active" == active || -e /etc/systemd/system/pilinkd.service ]]; then
-    systemctl stop pilinkd.service
+if [[ "$task_daemon_active" == active || -e /etc/systemd/system/rpi-ble-tunneld.service ]]; then
+    systemctl stop rpi-ble-tunneld.service
 fi
-if [[ "$task_network_active" == active || -e /etc/systemd/system/pilink-network.service ]]; then
-    systemctl disable --now pilink-network.service
-    systemctl reset-failed pilink-network.service
+if [[ "$task_network_active" == active || -e /etc/systemd/system/rpi-ble-tunnel-network.service ]]; then
+    systemctl disable --now rpi-ble-tunnel-network.service
+    systemctl reset-failed rpi-ble-tunnel-network.service
 fi
-install -d -m 755 /usr/local/libexec /usr/local/share/doc/pilink
-install -m 755 "$task_build/pilinkd" /usr/local/bin/pilinkd
-install -m 755 "$task_root/pi/pilink-network.py" /usr/local/libexec/pilink-network
-install -m 755 "$task_root/pi/pilink-service-control.py" /usr/local/libexec/pilink-service-control
+install -d -m 755 /usr/local/libexec /usr/local/share/doc/rpi-ble-tunnel
+install -m 755 "$task_build/rpi-ble-tunneld" /usr/local/bin/rpi-ble-tunneld
+install -m 755 "$task_root/pi/rpi-ble-tunnel-network.py" /usr/local/libexec/rpi-ble-tunnel-network
+install -m 755 "$task_root/pi/rpi-ble-tunnel-service-control.py" /usr/local/libexec/rpi-ble-tunnel-service-control
 if [[ "$(readlink -f "$task_hev")" != /usr/local/libexec/hev-socks5-tunnel ]]; then
     install -m 755 "$task_hev" /usr/local/libexec/hev-socks5-tunnel
 fi
-install -m 644 "$task_root/LICENSE" "$task_root/pi/hev-socks5-tunnel-LICENSE.txt" /usr/local/share/doc/pilink/
-install -m 644 "$task_root/pi/pilinkd.service" /etc/systemd/system/pilinkd.service
+install -m 644 "$task_root/LICENSE" "$task_root/pi/hev-socks5-tunnel-LICENSE.txt" /usr/local/share/doc/rpi-ble-tunnel/
+install -m 644 "$task_root/pi/rpi-ble-tunneld.service" /etc/systemd/system/rpi-ble-tunneld.service
 if [[ "$task_caller_managed" == true ]]; then
-    install -d -m 755 /etc/systemd/system/pilinkd.service.d
-    install -m 644 "$task_root/pi/pilink-caller-adapter.conf" /etc/systemd/system/pilinkd.service.d/20-caller-adapter.conf
+    install -d -m 755 /etc/systemd/system/rpi-ble-tunneld.service.d
+    install -m 644 "$task_root/pi/rpi-ble-tunnel-caller-adapter.conf" /etc/systemd/system/rpi-ble-tunneld.service.d/20-caller-adapter.conf
 fi
-rm -f /etc/systemd/system/pilink-network.service
+rm -f /etc/systemd/system/rpi-ble-tunnel-network.service
 systemctl daemon-reload
 if [[ "$task_caller_managed" == true ]]; then
     trap - ERR INT TERM
-    printf 'Installed caller-managed PiLink. Select an adapter through pilink-service-control to start. Backup: %s\n' "$task_backup"
+    printf 'Installed caller-managed rpi-ble-tunnel. Select an adapter through rpi-ble-tunnel-service-control to start. Backup: %s\n' "$task_backup"
     exit 0
 fi
-systemctl enable pilinkd.service
-systemctl restart pilinkd.service
+systemctl enable rpi-ble-tunneld.service
+systemctl restart rpi-ble-tunneld.service
 task_deadline=$((SECONDS + 60))
 task_ready=false
 while (( SECONDS < task_deadline )); do
-    if systemctl is-active --quiet pilinkd.service && \
-       [[ -f /run/pilink/link.json && -f /run/pilink-network/status.json ]]; then
-        task_invocation=$(systemctl show pilinkd.service -p InvocationID --value)
+    if systemctl is-active --quiet rpi-ble-tunneld.service && \
+       [[ -f /run/rpi-ble-tunnel/link.json && -f /run/rpi-ble-tunnel-network/status.json ]]; then
+        task_invocation=$(systemctl show rpi-ble-tunneld.service -p InvocationID --value)
         task_log=$(journalctl -b "_SYSTEMD_INVOCATION_ID=$task_invocation" --no-pager -o cat)
         if [[ "$task_log" == *"READY name="*"mode=internet"* ]]; then
             task_ready=true
@@ -230,9 +230,9 @@ while (( SECONDS < task_deadline )); do
     sleep 2
 done
 if [[ "$task_ready" != true ]]; then
-    printf 'PiLink did not finish registering its BLE service.\n' >&2
-    journalctl -u pilinkd.service -n 40 --no-pager >&2
+    printf 'rpi-ble-tunnel did not finish registering its BLE service.\n' >&2
+    journalctl -u rpi-ble-tunneld.service -n 40 --no-pager >&2
     false
 fi
 trap - ERR INT TERM
-printf 'Installed PiLink as pilinkd.service. Backup: %s\n' "$task_backup"
+printf 'Installed rpi-ble-tunnel as rpi-ble-tunneld.service. Backup: %s\n' "$task_backup"

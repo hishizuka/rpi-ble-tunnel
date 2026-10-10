@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PiLink</string>
+    <string name="app_name">rpi-ble-tunnel</string>
     <string name="connection_tab">Connection</string>
     <string name="diagnostics_tab">Diagnostics</string>
     <string name="settings_title">Settings</string>
@@ -50,7 +50,7 @@
     <string name="discovered_address">Bluetooth address\n%1$s</string>
     <string name="choose_pi">Choose a Pi to register.</string>
     <string name="pi_not_found">No matching Pi found. Check its power and Bluetooth.</string>
-    <string name="pi_update_required">Update PiLink on this Pi to read its hostname.</string>
+    <string name="pi_update_required">Update rpi-ble-tunnel on this Pi to read its hostname.</string>
     <string name="pi_scan_failed">Could not start searching for Pis.</string>
     <string name="bluetooth_off">Turn on Bluetooth.</string>
     <string name="edit_named_device">%1$s · Edit\n%2$s</string>
@@ -73,11 +73,11 @@
     <string name="diagnostic_log">Diagnostic log</string>
     <string name="no_log">Connect to see diagnostic logs here.</string>
     <string name="copy_log">Copy log</string>
-    <string name="app_version">PiLink %1$s</string>
+    <string name="app_version">rpi-ble-tunnel %1$s</string>
     <string name="open_source_licenses">Open source licenses</string>
     <string name="licenses_title">Material Design Icons</string>
     <string name="done">Close</string>
-    <string name="notification_channel">PiLink connection</string>
+    <string name="notification_channel">rpi-ble-tunnel connection</string>
     <string name="stop">Stop</string>
     <string name="stopped">Stopped</string>
     <string name="invalid_connection_settings">Invalid connection settings</string>

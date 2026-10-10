@@ -4,6 +4,8 @@ English (primary) | [日本語](development.ja.md)
 
 See the [README](../README.md) for normal installation, usage, and client build requirements; the [protocol](protocol.md) for communication behavior; and [operations and network management](operations.md) for service control and recovery.
 
+Use `rpi-ble-tunnel` for the project name, app display names, and command/file prefixes. Where language syntax requires another spelling, use `RpiBleTunnel` for Swift/Kotlin types, `rpi_ble_tunnel` / `RPI_BLE_TUNNEL` for identifiers, and `org.rpibletunnel` for application/package IDs. Do not introduce another product name or abbreviation.
+
 ## Source and test layout
 
 | Directory | Contents |
@@ -31,7 +33,7 @@ Run from the repository root. C tests require CMake 3.16 or later and a C compil
 
 ### Integration coverage and limits
 
-The Pi's `pi/mux.c`, the Mac's `PiLinkCore/Multiplex.swift` / `PiLinkMux/MuxProxy.swift`, and Android's `Multiplex.kt` / `MuxBridge.kt` are shared between the real relay and test executables.
+The Pi's `pi/mux.c`, the Mac's `RpiBleTunnelCore/Multiplex.swift` / `RpiBleTunnelMux/MuxProxy.swift`, and Android's `Multiplex.kt` / `MuxBridge.kt` are shared between the real relay and test executables.
 
 The test transport substitutes loopback TCP for the wire and splits transfers into 127-byte chunks. C tests use Unix `SOCK_SEQPACKET` on Linux and Unix `SOCK_DGRAM` on Mac to check SDU fragmentation and coalescing. These tests cover framing, TCP relay, and flow control, but do not exercise the BLE stack. Verification using real Pi / Android hardware runs separately.
 
@@ -72,8 +74,8 @@ Isolated network-management verification uses separate network / mount / UTS nam
 ```bash
 sudo unshare --net --mount --uts --propagation private --fork \
   python3 tests/integration/verify-pi-network.py \
-  --work /tmp/pilink-network-check \
-  --helper "$PWD/pi/pilink-network.py" \
+  --work /tmp/rpi-ble-tunnel-network-check \
+  --helper "$PWD/pi/rpi-ble-tunnel-network.py" \
   --binary /usr/local/libexec/hev-socks5-tunnel
 ```
 

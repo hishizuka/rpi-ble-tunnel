@@ -12,11 +12,11 @@ import time
 
 def main():
     root = Path(__file__).resolve().parents[2]
-    parser = argparse.ArgumentParser(description="PiLink BLE 実機 echo 検証")
+    parser = argparse.ArgumentParser(description="rpi-ble-tunnel BLE 実機 echo 検証")
     parser.add_argument("--name", required=True, help="Pi hostname advertised over BLE")
     parser.add_argument("--large", action="store_true", help="1 MiB の検証を追加（最大 10 分）")
     args = parser.parse_args()
-    binary = root / "build/PiLink.app/Contents/MacOS/pilink"
+    binary = root / "build/rpi-ble-tunnel.app/Contents/MacOS/rpi-ble-tunnel"
     if not binary.is_file():
         parser.error("先に ./scripts/build-macos.sh を実行してください")
     cases = [(65, 1, 120), (65536, 511, 120)]

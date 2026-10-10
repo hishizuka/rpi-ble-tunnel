@@ -4,32 +4,32 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="vertical" android:padding="24dp">
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/connection_mode" android:textAppearance="@style/PiLink.Body" />
+            android:text="@string/connection_mode" android:textAppearance="@style/RpiBleTunnel.Body" />
         <TextView android:id="@+id/mode_value" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:text="@string/mode_unknown" android:textAppearance="@style/PiLink.Title"
+            android:layout_marginTop="8dp" android:text="@string/mode_unknown" android:textAppearance="@style/RpiBleTunnel.Title"
             android:clickable="false" android:focusable="false" android:accessibilityLiveRegion="polite" />
         <TextView android:id="@+id/mode_detail" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:text="@string/mode_unknown_help" android:textAppearance="@style/PiLink.Body" />
+            android:layout_marginTop="8dp" android:text="@string/mode_unknown_help" android:textAppearance="@style/RpiBleTunnel.Body" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:text="@string/mode_read_only_help" android:textAppearance="@style/PiLink.Body" />
+            android:layout_marginTop="8dp" android:text="@string/mode_read_only_help" android:textAppearance="@style/RpiBleTunnel.Body" />
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginVertical="28dp" />
         <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/power_saving_switch"
             android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-            android:text="@string/power_saving" android:textAppearance="@style/PiLink.Body" />
+            android:text="@string/power_saving" android:textAppearance="@style/RpiBleTunnel.Body" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:text="@string/power_saving_help" android:textAppearance="@style/PiLink.Body" />
+            android:layout_marginTop="8dp" android:text="@string/power_saving_help" android:textAppearance="@style/RpiBleTunnel.Body" />
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginVertical="28dp" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/registered_devices" android:textAppearance="@style/PiLink.Title" />
+            android:text="@string/registered_devices" android:textAppearance="@style/RpiBleTunnel.Title" />
         <LinearLayout android:id="@+id/settings_devices" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="vertical" />
         <com.google.android.material.button.MaterialButton android:id="@+id/add_device"
             style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/add_device" android:layout_marginTop="12dp" />
         <TextView android:id="@+id/version" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="32dp" android:textAppearance="@style/PiLink.Body" />
+            android:layout_marginTop="32dp" android:textAppearance="@style/RpiBleTunnel.Body" />
         <com.google.android.material.button.MaterialButton android:id="@+id/licenses"
             style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="@string/open_source_licenses" />

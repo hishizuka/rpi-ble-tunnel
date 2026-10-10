@@ -13,7 +13,7 @@
     <queries>
         <package android:name="com.server.auditor.ssh.client" />
     </queries>
-    <application android:label="PiLink" android:icon="@drawable/ic_link"
+    <application android:label="@string/app_name" android:icon="@drawable/ic_link"
         android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter>
@@ -21,7 +21,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:name=".PiLinkService" android:exported="false"
+        <service android:name=".RpiBleTunnelService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

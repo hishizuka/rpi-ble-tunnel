@@ -4,6 +4,8 @@
 
 通常の導入・利用とクライアントのビルド環境は [README](../README.ja.md)、通信方式は[通信仕様](protocol.ja.md)、サービスの操作と復旧は[運用・ネットワーク管理](operations.ja.md)を参照してください。
 
+プロジェクト名・アプリ表示名・コマンドやファイルの接頭辞は `rpi-ble-tunnel` を使います。言語の構文上必要な場合は、Swift / Kotlin の型名に `RpiBleTunnel`、識別子に `rpi_ble_tunnel` / `RPI_BLE_TUNNEL`、アプリ・パッケージ ID に `org.rpibletunnel` を使います。別の製品名や略称は導入しません。
+
 ## ソースとテストの構成
 
 | ディレクトリ | 内容 |
@@ -31,7 +33,7 @@
 
 ### 結合検証の対象と限界
 
-Pi の `pi/mux.c`、Mac の `PiLinkCore/Multiplex.swift` / `PiLinkMux/MuxProxy.swift`、Android の `Multiplex.kt` / `MuxBridge.kt` を実際の中継と検証用実行ファイルで共用します。
+Pi の `pi/mux.c`、Mac の `RpiBleTunnelCore/Multiplex.swift` / `RpiBleTunnelMux/MuxProxy.swift`、Android の `Multiplex.kt` / `MuxBridge.kt` を実際の中継と検証用実行ファイルで共用します。
 
 検証用 transport は loopback TCP を wire として使い、127バイトに分割して転送します。C のテストは Linux で Unix `SOCK_SEQPACKET`、Mac で Unix `SOCK_DGRAM` を使い、SDU の分割・連結も検証します。フレーム処理・TCP 中継・流量制御を検証できますが、BLE stack は通りません。Pi / Android の実機を操作する検証は別途実行します。
 
@@ -72,8 +74,8 @@ python3 tests/integration/verify-pi-internet.py --target pi@raspberrypi.local \
 ```bash
 sudo unshare --net --mount --uts --propagation private --fork \
   python3 tests/integration/verify-pi-network.py \
-  --work /tmp/pilink-network-check \
-  --helper "$PWD/pi/pilink-network.py" \
+  --work /tmp/rpi-ble-tunnel-network-check \
+  --helper "$PWD/pi/rpi-ble-tunnel-network.py" \
   --binary /usr/local/libexec/hev-socks5-tunnel
 ```
 

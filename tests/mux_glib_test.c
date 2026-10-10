@@ -1,5 +1,5 @@
-#define main pilinkd_entry_for_test
-#include "../pi/pilinkd.c"
+#define main rpi_ble_tunneld_entry_for_test
+#include "../pi/rpi-ble-tunneld.c"
 #undef main
 #include <assert.h>
 

@@ -17,5 +17,5 @@ fi
 python3 "$task_root/tests/integration/verify-internet.py" --client android --server "$task_root/build/mux-interop-server" \
     --output "$task_root/build/android-internet-results.json"
 mkdir -p "$task_root/build"
-cp "$task_root/android/app/build/outputs/apk/debug/app-debug.apk" "$task_root/build/pilink-android-debug.apk"
-printf 'APK: %s/build/pilink-android-debug.apk\n' "$task_root"
+cp "$task_root/android/app/build/outputs/apk/debug/app-debug.apk" "$task_root/build/rpi-ble-tunnel-android-debug.apk"
+printf 'APK: %s/build/rpi-ble-tunnel-android-debug.apk\n' "$task_root"

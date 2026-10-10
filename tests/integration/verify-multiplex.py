@@ -142,8 +142,8 @@ def ssh_checks(port, directory, record, wait_idle, size=262144, timeout=90, *, h
             detail = error.stderr.decode(errors="replace").strip()
             raise RuntimeError(f"SSH command exited {error.returncode}: {detail}") from error
 
-    remote = run(ssh + ["mktemp -d /tmp/pilink-mux-test.XXXXXXXX"]).stdout.decode().strip()
-    assert remote.startswith("/tmp/pilink-mux-test.") and "/" not in remote[len("/tmp/"):]
+    remote = run(ssh + ["mktemp -d /tmp/rpi-ble-tunnel-mux-test.XXXXXXXX"]).stdout.decode().strip()
+    assert remote.startswith("/tmp/rpi-ble-tunnel-mux-test.") and "/" not in remote[len("/tmp/"):]
     local = directory / "binary.dat"
     local.write_bytes(bytes((i * 37 + 11) % 256 for i in range(size)))
     try:
@@ -266,7 +266,7 @@ def main():
     if not args.proxy_port:
         bin_path = Path(subprocess.check_output(["swift", "build", "--package-path", str(ROOT / "macos"),
                                                 "--show-bin-path"], text=True).strip())
-    with tempfile.TemporaryDirectory(prefix="pilink-mux-") as temp:
+    with tempfile.TemporaryDirectory(prefix="rpi-ble-tunnel-mux-") as temp:
         directory = Path(temp)
         processes, logs = [], []
         echo = None
@@ -288,7 +288,7 @@ def main():
             if not args.proxy_port:
                 handle = log.open("w")
                 logs.append(handle)
-                proxy = subprocess.Popen([str(bin_path / "pilink-mux-test"), str(wire_port), str(local_port)],
+                proxy = subprocess.Popen([str(bin_path / "rpi-ble-tunnel-mux-test"), str(wire_port), str(local_port)],
                                          stdout=handle, stderr=handle)
                 processes.append(proxy)
                 wait_ready(proxy, log, "READY")

@@ -4,11 +4,11 @@ import org.gradle.api.file.RegularFileProperty
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'org.pilink.android'
+    namespace 'org.rpibletunnel.android'
     compileSdk 36
     buildFeatures { buildConfig true }
     defaultConfig {
-        applicationId 'org.pilink.android'
+        applicationId 'org.rpibletunnel.android'
         minSdk 29
         targetSdk 36
         versionCode 1
@@ -19,7 +19,7 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     testOptions.unitTests.all {
-        systemProperty 'pilink.mux.server', rootProject.file('../build/mux-interop-server').absolutePath
+        systemProperty 'rpi-ble-tunnel.mux.server', rootProject.file('../build/mux-interop-server').absolutePath
     }
 }
 kotlin {
@@ -48,7 +48,7 @@ abstract class GenerateLicenseAssets extends DefaultTask {
 
 def generateLicenseAssets = tasks.register('generateLicenseAssets', GenerateLicenseAssets) {
     licenseFile.set(rootProject.layout.projectDirectory.file('../LICENSE'))
-    outputDirectory.set(layout.buildDirectory.dir('generated/pilink-license'))
+    outputDirectory.set(layout.buildDirectory.dir('generated/rpi-ble-tunnel-license'))
 }
 androidComponents {
     onVariants(selector().all()) { variant ->
@@ -59,7 +59,7 @@ androidComponents {
 tasks.register('muxTransport', JavaExec) {
     dependsOn 'compileDebugUnitTestKotlin'
     classpath = tasks.named('testDebugUnitTest').get().classpath
-    mainClass = 'org.pilink.android.MuxTransportMain'
+    mainClass = 'org.rpibletunnel.android.MuxTransportMain'
     doFirst {
         args = [providers.gradleProperty('muxWirePort').get(), providers.gradleProperty('muxLocalPort').get()]
         if (providers.gradleProperty('muxInternet').getOrElse('false') == 'true') args += ['internet']

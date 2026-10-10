@@ -12,7 +12,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-spec = importlib.util.spec_from_file_location("pilink_network", Path(__file__).resolve().parents[1] / "pi/pilink-network.py")
+spec = importlib.util.spec_from_file_location("rpi_ble_tunnel_network", Path(__file__).resolve().parents[1] / "pi/rpi-ble-tunnel-network.py")
 network = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(network)
 

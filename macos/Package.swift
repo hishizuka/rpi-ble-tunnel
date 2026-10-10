@@ -4,26 +4,26 @@ import PackageDescription
 
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let package = Package(
-    name: "PiLink",
+    name: "rpi-ble-tunnel",
     platforms: [.macOS(.v12)],
-    products: [.executable(name: "pilink", targets: ["pilink"]),
-               .executable(name: "pilink-core-tests", targets: ["pilink-core-tests"]),
-               .executable(name: "pilink-mux-test", targets: ["pilink-mux-test"])],
+    products: [.executable(name: "rpi-ble-tunnel", targets: ["rpi-ble-tunnel"]),
+               .executable(name: "rpi-ble-tunnel-core-tests", targets: ["rpi-ble-tunnel-core-tests"]),
+               .executable(name: "rpi-ble-tunnel-mux-test", targets: ["rpi-ble-tunnel-mux-test"])],
     targets: [
-        .target(name: "PiLinkCore"),
-        .target(name: "PiLinkMux", dependencies: ["PiLinkCore"]),
+        .target(name: "RpiBleTunnelCore"),
+        .target(name: "RpiBleTunnelMux", dependencies: ["RpiBleTunnelCore"]),
         .executableTarget(
-            name: "pilink",
-            dependencies: ["PiLinkCore", "PiLinkMux"],
+            name: "rpi-ble-tunnel",
+            dependencies: ["RpiBleTunnelCore", "RpiBleTunnelMux"],
             linkerSettings: [
                 .linkedFramework("CoreBluetooth"),
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT",
                               "-Xlinker", "__info_plist", "-Xlinker", "\(root)/Info.plist"])
             ]
         ),
-        .executableTarget(name: "pilink-core-tests", dependencies: ["PiLinkCore"],
-                          path: "Tests/PiLinkCoreTests"),
-        .executableTarget(name: "pilink-mux-test", dependencies: ["PiLinkMux"],
+        .executableTarget(name: "rpi-ble-tunnel-core-tests", dependencies: ["RpiBleTunnelCore"],
+                          path: "Tests/RpiBleTunnelCoreTests"),
+        .executableTarget(name: "rpi-ble-tunnel-mux-test", dependencies: ["RpiBleTunnelMux"],
                           path: "Tests/MuxTransport")
     ]
 )

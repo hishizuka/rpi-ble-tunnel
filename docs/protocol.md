@@ -36,7 +36,7 @@ Clients read GATT values sequentially and validate lengths, version, PSM, suppor
 
 Android maintains connections to older Pi versions using the legacy Bluetooth name stored in migrated registrations. New automatic registration requires an updated Pi providing the hostname Characteristic. The added Characteristic does not change the existing version, PSM, capabilities, or framing.
 
-BlueZ's ObjectManager is at `/org/pilink`, the Service at `/org/pilink/service0`, its Characteristics at `char0` through `char3`, and advertising at `/org/pilink/advertisement0`. GATT and advertising are registered asynchronously after the L2CAP listener is created. If BlueZ or the system bus stops, the daemon exits and systemd restarts it.
+BlueZ's ObjectManager is at `/org/rpi_ble_tunnel`, the Service at `/org/rpi_ble_tunnel/service0`, its Characteristics at `char0` through `char3`, and advertising at `/org/rpi_ble_tunnel/advertisement0`. GATT and advertising are registered asynchronously after the L2CAP listener is created. If BlueZ or the system bus stops, the daemon exits and systemd restarts it.
 
 ## L2CAP CoC
 

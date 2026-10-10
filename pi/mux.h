@@ -1,5 +1,5 @@
-#ifndef PILINK_MUX_H
-#define PILINK_MUX_H
+#ifndef RPI_BLE_TUNNEL_MUX_H
+#define RPI_BLE_TUNNEL_MUX_H
 
 #include <stdbool.h>
 #include <stddef.h>

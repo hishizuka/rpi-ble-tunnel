@@ -1,12 +1,12 @@
 import Darwin
 import Foundation
-import PiLinkMux
+import RpiBleTunnelMux
 
 // This executable substitutes loopback TCP for BLE without changing MuxProxy.
 guard [3, 4].contains(CommandLine.arguments.count),
       let wirePort = UInt16(CommandLine.arguments[1]), wirePort > 0,
       let localPort = UInt16(CommandLine.arguments[2]), localPort > 0 else {
-    fatalError("Usage: pilink-mux-test WIRE_PORT LOCAL_PORT [internet]")
+    fatalError("Usage: rpi-ble-tunnel-mux-test WIRE_PORT LOCAL_PORT [internet]")
 }
 setbuf(stdout, nil)
 var result: Int32?

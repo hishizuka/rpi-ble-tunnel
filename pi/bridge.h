@@ -1,5 +1,5 @@
-#ifndef PILINK_BRIDGE_H
-#define PILINK_BRIDGE_H
+#ifndef RPI_BLE_TUNNEL_BRIDGE_H
+#define RPI_BLE_TUNNEL_BRIDGE_H
 
 #include "echo.h"
 #include <stdbool.h>

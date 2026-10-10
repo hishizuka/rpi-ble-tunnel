@@ -17,7 +17,7 @@ import time
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PiLink SSH 実機検証（pilink connect を先に起動）")
+    parser = argparse.ArgumentParser(description="rpi-ble-tunnel SSH 実機検証（rpi-ble-tunnel connect を先に起動）")
     parser.add_argument("--port", type=int, default=2222)
     parser.add_argument("--user", default="pi")
     parser.add_argument("--host-key-alias", required=True)
@@ -53,16 +53,16 @@ def main():
         return process.stdout
 
     try:
-        log = run("SSH login", [*ssh, target, "hostname; id -un; mktemp -d /tmp/pilink-phase2.XXXXXXXX"])
+        log = run("SSH login", [*ssh, target, "hostname; id -un; mktemp -d /tmp/rpi-ble-tunnel-phase2.XXXXXXXX"])
         lines = log.strip().splitlines()
-        if len(lines) != 3 or lines[1] != args.user or not re.fullmatch(r"/tmp/pilink-phase2\.[A-Za-z0-9]+", lines[2]):
+        if len(lines) != 3 or lines[1] != args.user or not re.fullmatch(r"/tmp/rpi-ble-tunnel-phase2\.[A-Za-z0-9]+", lines[2]):
             raise RuntimeError(f"Unexpected login output: {log}")
         remote = lines[2]
         print(f"Pi hostname={lines[0]}", flush=True)
         log = run("PTY and exit status 7", [*ssh, "-tt", target, "test -t 0 && printf 'PTY_OK\\n'; exit 7"], expected=7)
         if "PTY_OK" not in log:
             raise RuntimeError("PTY was not allocated")
-        with tempfile.TemporaryDirectory(prefix="pilink-phase2-", dir=root / "build") as temporary:
+        with tempfile.TemporaryDirectory(prefix="rpi-ble-tunnel-phase2-", dir=root / "build") as temporary:
             work = Path(temporary)
             payload = os.urandom(65536)
             source = work / "source.bin"

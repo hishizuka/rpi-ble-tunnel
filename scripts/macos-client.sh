@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-task_binary="$task_root/build/PiLink.app/Contents/MacOS/pilink"
-task_pid_file="$task_root/build/pilink-connect.pid"
-task_log="$task_root/build/pilink-connect.log"
+task_binary="$task_root/build/rpi-ble-tunnel.app/Contents/MacOS/rpi-ble-tunnel"
+task_pid_file="$task_root/build/rpi-ble-tunnel-connect.pid"
+task_log="$task_root/build/rpi-ble-tunnel-connect.log"
 task_action=${1:-status}
 task_name=${2:-}
 task_pid=
@@ -23,7 +23,7 @@ case "$task_action" in
             exit 2
         fi
         if client_alive; then
-            printf 'PiLink client is running (PID %s)\n' "$task_pid"
+            printf 'rpi-ble-tunnel client is running (PID %s)\n' "$task_pid"
             exit 0
         fi
         if [ ! -x "$task_binary" ]; then
@@ -52,14 +52,14 @@ PY
                 exit 1
             fi
             if /usr/bin/grep -q '^READY ' "$task_log"; then
-                printf 'PiLink SSH ready: 127.0.0.1:2222 (PID %s)\nLog: %s\n' "$task_pid" "$task_log"
+                printf 'rpi-ble-tunnel SSH ready: 127.0.0.1:2222 (PID %s)\nLog: %s\n' "$task_pid" "$task_log"
                 exit 0
             fi
             sleep 1
             task_count=$((task_count + 1))
         done
         if client_alive; then kill -TERM "$task_pid"; fi
-        printf 'PiLink did not become ready; see %s\n' "$task_log" >&2
+        printf 'rpi-ble-tunnel did not become ready; see %s\n' "$task_log" >&2
         exit 1
         ;;
     stop)
@@ -71,18 +71,18 @@ PY
                 task_count=$((task_count + 1))
             done
             if client_alive; then
-                printf 'PiLink is still shutting down (PID %s)\n' "$task_pid" >&2
+                printf 'rpi-ble-tunnel is still shutting down (PID %s)\n' "$task_pid" >&2
                 exit 1
             fi
         fi
         rm -f "$task_pid_file"
-        printf 'PiLink client stopped\n'
+        printf 'rpi-ble-tunnel client stopped\n'
         ;;
     status)
         if client_alive; then
-            printf 'PiLink client is running (PID %s)\nLog: %s\n' "$task_pid" "$task_log"
+            printf 'rpi-ble-tunnel client is running (PID %s)\nLog: %s\n' "$task_pid" "$task_log"
         else
-            printf 'PiLink client is not running\n'
+            printf 'rpi-ble-tunnel client is not running\n'
             exit 1
         fi
         ;;

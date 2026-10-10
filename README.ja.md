@@ -1,12 +1,12 @@
-# PiLink — BLE 経由のネットワークトンネル
+# rpi-ble-tunnel — BLE 経由のネットワークトンネル
 
 [English (primary)](README.md) | 日本語
 
-PiLink は、BLE 経由で TCP 通信を可能とするライブラリです。Android スマートフォンや Mac から Pi に SSH で接続でき、Pi からはその端末の回線を使ってインターネットにアクセスできます。
+rpi-ble-tunnel は、BLE 経由で TCP 通信を可能とするライブラリです。Android スマートフォンや Mac から Pi に SSH で接続でき、Pi からはその端末の回線を使ってインターネットにアクセスできます。
 
 Pi とクライアントが同じ Wi-Fi に接続している必要はありません。
 
-<img src="docs/assets/pilink-overview.svg" alt="PiLink connects a Raspberry Pi to an Android phone or Mac over one BLE link, relaying SSH to the Pi and outbound TCP through the client's Internet connection. No shared Wi-Fi network required." width="1280">
+<img src="docs/assets/rpi-ble-tunnel-overview.svg" alt="rpi-ble-tunnel connects a Raspberry Pi to an Android phone or Mac over one BLE link, relaying SSH to the Pi and outbound TCP through the client's Internet connection. No shared Wi-Fi network required." width="1280">
 
 - Android / Mac の SSH クライアントから、Pi の OpenSSH に接続できます。SCP・SFTP・rsync も利用できます。
 - Pi の TCP アプリから、Android / Mac のインターネット回線を利用できます。アプリごとのプロキシ設定は不要です。
@@ -44,7 +44,7 @@ bash scripts/install-pi-network.sh
 
 初回の長いビルド中に sudo の認証が切れた場合は、`sudo -v` の後に同じコマンドを再実行してください。ビルド済みの成果物は再利用されます。`sudo bash scripts/install-pi-network.sh` でビルドから導入まで root で実行することもできます。
 
-依存導入・ビルド・テスト・サービス配置を行い、`pilinkd.service` を起動して自動起動を有効にします。更新も同じ手順です。更新中は BLE 接続が切れるため、管理用 LAN / USB SSH から実行してください。[更新・復旧の詳細](docs/operations.ja.md#更新とインストーラー)
+依存導入・ビルド・テスト・サービス配置を行い、`rpi-ble-tunneld.service` を起動して自動起動を有効にします。更新も同じ手順です。更新中は BLE 接続が切れるため、管理用 LAN / USB SSH から実行してください。[更新・復旧の詳細](docs/operations.ja.md#更新とインストーラー)
 
 Mac からソースを転送して導入することもできます。管理用 SSH の公開鍵認証・登録済みホスト鍵・Pi 側のパスワードなし sudo が必要です。Mac 上で実行します。
 
@@ -63,7 +63,7 @@ JDK は `JAVA_HOME`、SDK は `ANDROID_HOME` または `android/local.properties
 ./scripts/deploy-android.sh ADB_SERIAL
 ```
 
-APK は `build/pilink-android-debug.apk` に保存されます。複数端末が接続されていなければ、配置時の `ADB_SERIAL` は省略できます。
+APK は `build/rpi-ble-tunnel-android-debug.apk` に保存されます。複数端末が接続されていなければ、配置時の `ADB_SERIAL` は省略できます。
 
 ### Mac
 
@@ -73,13 +73,13 @@ APK は `build/pilink-android-debug.apk` に保存されます。複数端末が
 ./scripts/build-macos.sh
 ```
 
-クライアントは `build/PiLink.app` に保存されます。
+クライアントは `build/rpi-ble-tunnel.app` に保存されます。
 
 ## 使い方
 
 ### Android で接続
 
-1. PiLink の設定で「Piを登録」を開き、「付近のデバイス」の利用を許可して検索結果から Pi を選び、表示名を付けて保存します。「手動入力」ではホスト名だけを入力して検索できます。Bluetooth アドレスは選んだ端末から自動で取得します。Android 10 / 11 では位置情報の許可と位置情報 ON が必要です。
+1. rpi-ble-tunnel の設定で「Piを登録」を開き、「付近のデバイス」の利用を許可して検索結果から Pi を選び、表示名を付けて保存します。「手動入力」ではホスト名だけを入力して検索できます。Bluetooth アドレスは選んだ端末から自動で取得します。Android 10 / 11 では位置情報の許可と位置情報 ON が必要です。
 2. 接続画面で Pi を選んで「接続する」を押し、通知の許可を求められたら許可します。
 3. 接続後、「Termiusで開く」または「コマンドをコピー」から SSH を使います。SSH の認証情報は使用する SSH クライアント側に登録します。
 
@@ -117,7 +117,7 @@ Mac は予期しない切断でクライアントを終了します。再接続�
 
 ### Pi からインターネットを利用
 
-Android / Mac の PiLink 接続後、Pi 上で通常の TCP コマンドを使えます。個別の SOCKS 設定は不要です。
+Android / Mac の rpi-ble-tunnel 接続後、Pi 上で通常の TCP コマンドを使えます。個別の SOCKS 設定は不要です。
 
 ```bash
 curl --noproxy '*' https://example.com/
@@ -144,4 +144,4 @@ curl --noproxy '*' https://example.com/
 
 ## ライセンス
 
-PiLink は [MIT ライセンス](LICENSE)で公開しています。外部コード・素材には、それぞれのライセンスが適用されます。[外部コード・素材](docs/third-party-notices.ja.md)を参照してください。
+rpi-ble-tunnel は [MIT ライセンス](LICENSE)で公開しています。外部コード・素材には、それぞれのライセンスが適用されます。[外部コード・素材](docs/third-party-notices.ja.md)を参照してください。

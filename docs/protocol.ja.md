@@ -36,7 +36,7 @@ Pi の BLE 名の既定はシステムのホスト名です。広告名が省略
 
 旧 Pi への Android 接続は、移行済み登録に保存した従来の Bluetooth 名を使って維持します。新規の自動登録には hostname Characteristic を提供する Pi 側の更新が必要です。追加 Characteristic により既存の version・PSM・capabilities やフレームは変更していません。
 
-BlueZ の ObjectManager は `/org/pilink`、Service は `/org/pilink/service0`、Characteristic は `char0`〜`char3`、広告は `/org/pilink/advertisement0` です。L2CAP listener の作成後に GATT / 広告を非同期登録します。BlueZ または system bus の停止時は daemon も終了し、systemd が再起動します。
+BlueZ の ObjectManager は `/org/rpi_ble_tunnel`、Service は `/org/rpi_ble_tunnel/service0`、Characteristic は `char0`〜`char3`、広告は `/org/rpi_ble_tunnel/advertisement0` です。L2CAP listener の作成後に GATT / 広告を非同期登録します。BlueZ または system bus の停止時は daemon も終了し、systemd が再起動します。
 
 ## L2CAP CoC
 

@@ -18,7 +18,7 @@ import time
 import uuid
 
 
-BODY = b"PiLink isolated NetworkManager test\n" * 1024
+BODY = b"rpi-ble-tunnel isolated NetworkManager test\n" * 1024
 
 
 def command(*args):

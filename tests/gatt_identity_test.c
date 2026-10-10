@@ -1,5 +1,5 @@
-#define main pilinkd_entry_for_test
-#include "../pi/pilinkd.c"
+#define main rpi_ble_tunneld_entry_for_test
+#include "../pi/rpi-ble-tunneld.c"
 #undef main
 #include <assert.h>
 
@@ -34,7 +34,7 @@ int main(void)
     assert(length == 4 && bytes[0] == 8);
     g_variant_unref(value);
     puts("GATT full hostname and existing protocol metadata: PASS");
-    char *directory = g_dir_make_tmp("pilink-state-XXXXXX", NULL);
+    char *directory = g_dir_make_tmp("rpi-ble-tunnel-state-XXXXXX", NULL);
     assert(directory);
     d.state_file = g_build_filename(directory, "link.json", NULL);
     d.start_ticks = 123;
